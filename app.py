@@ -35,21 +35,37 @@ SHEET_NAMES = {
 st.markdown(
     """
 <style>
+/* ✅ iPhone/PWA + 다크모드 꼬임 방지: 라이트 테마 변수 강제 */
+:root {
+  color-scheme: light !important;
+  --background-color: #ffffff !important;
+  --secondary-background-color: #ffffff !important;
+  --text-color: #111111 !important;
+  --secondary-text-color: #555555 !important;
+}
+
 /* 기본 레이아웃 */
-.block-container {padding-top: 1.0rem; padding-bottom: 3.0rem; max-width: 860px;}
+.block-container {padding-top: 0.8rem; padding-bottom: 3.0rem; max-width: 860px;}
 button, input, textarea {font-size: 16px !important;} /* iOS zoom 방지 */
 
 /* Sticky Tabs */
-div[data-testid="stTabs"] {position: sticky; top: 0; z-index: 999; background: white; padding-top: 0.2rem;}
+div[data-testid="stTabs"] {position: sticky; top: 0; z-index: 999; background: #ffffff; padding-top: 0.2rem;}
 div[data-testid="stTabs"] button {padding: 10px 12px;}
 
-/* ✅ iPhone(PWA)에서 레이아웃 안정화 */
+/* 배경/글자색 강제 */
+html, body, [data-testid="stApp"], [data-testid="stAppViewContainer"], [data-testid="stHeader"]{
+  background: #ffffff !important;
+  color: var(--text-color) !important;
+}
+h1, h2, h3, p, label, span, div[data-testid="stMarkdownContainer"]{
+  color: var(--text-color) !important;
+}
+
+/* ✅ 모바일에서 탭이 잘리지 않게 가로 스크롤 */
 @media (max-width: 480px) {
-  .block-container { padding-top: 0.6rem !important; padding-left: 0.8rem !important; padding-right: 0.8rem !important; }
+  .block-container { padding-left: 0.8rem !important; padding-right: 0.8rem !important; }
   h1 { font-size: 2.0rem !important; line-height: 1.1 !important; margin-bottom: 0.3rem !important; }
   h2 { font-size: 1.3rem !important; margin-top: 0.8rem !important; }
-
-  /* 탭이 잘리지 않게 가로 스크롤 */
   div[data-testid="stTabs"] [data-baseweb="tab-list"]{
     overflow-x: auto !important;
     flex-wrap: nowrap !important;
@@ -57,16 +73,12 @@ div[data-testid="stTabs"] button {padding: 10px 12px;}
   }
   div[data-testid="stTabs"] button { padding: 8px 10px !important; }
 }
-
-/* ✅ 다크모드/PWA에서 배경 꼬임 방지 */
-html, body, [data-testid="stAppViewContainer"], [data-testid="stHeader"], [data-testid="stApp"] {
-  background: #ffffff !important;
-}
 </style>
 """,
     unsafe_allow_html=True,
+),
+    unsafe_allow_html=True,
 )
-
 
 # -----------------------------
 # Helpers
@@ -268,10 +280,6 @@ def delete_row_by_id(key: str, row_id: str):
 # -----------------------------
 st.title("📒 가계부 웹앱")
 
-# Mobile layout toggle (recommended for iPhone / PWA)
-mobile_mode = st.toggle("📱 모바일 모드", value=True, help="iPhone/홈화면 모드에서 레이아웃을 안정적으로 표시합니다.")
-
-
 tabs = st.tabs(TAB_NAMES)
 today = datetime.now()
 
@@ -281,15 +289,11 @@ today = datetime.now()
 with tabs[0]:
     st.subheader("가계부")
 
-    if mobile_mode:
+    c1, c2 = st.columns(2)
+    with c1:
         year = st.selectbox("연도", list(range(today.year - 3, today.year + 2)), index=3, key="ly")
+    with c2:
         month = st.selectbox("월", list(range(1, 13)), index=today.month - 1, key="lm")
-    else:
-        c1, c2 = st.columns(2)
-        with c1:
-            year = st.selectbox("연도", list(range(today.year - 3, today.year + 2)), index=3, key="ly")
-        with c2:
-            month = st.selectbox("월", list(range(1, 13)), index=today.month - 1, key="lm")
     ym = ym_from_year_month(year, month)
 
     # ---- 입력 ----
@@ -304,23 +308,17 @@ with tabs[0]:
         st.session_state["ledger_last_type"] = entry_type
 
     with st.form("ledger_add_form", clear_on_submit=True):
-        if mobile_mode:
+        d1, d2 = st.columns(2)
+        with d1:
             date_str = st.text_input("날짜 (0000/00/00)", value=today.strftime("%Y/%m/%d"))
+        with d2:
             category = st.selectbox("카테고리", cats, key="ledger_category")
-            amount_str = st.text_input("금액 (예: 12,345 / -12,345)", value="")
-            memo = st.text_input("메모", value="")
-        else:
-            d1, d2 = st.columns(2)
-            with d1:
-                date_str = st.text_input("날짜 (0000/00/00)", value=today.strftime("%Y/%m/%d"))
-            with d2:
-                category = st.selectbox("카테고리", cats, key="ledger_category")
 
-            a1, a2 = st.columns([1, 2])
-            with a1:
-                amount_str = st.text_input("금액 (예: 12,345 / -12,345)", value="")
-            with a2:
-                memo = st.text_input("메모", value="")
+        a1, a2 = st.columns([1, 2])
+        with a1:
+            amount_str = st.text_input("금액 (예: 12,345 / -12,345)", value="")
+        with a2:
+            memo = st.text_input("메모", value="")
         ok = st.form_submit_button("저장", type="primary")
 
     if ok:
@@ -381,15 +379,10 @@ with tabs[0]:
     bmode = st.radio("잔액 보기", ["선택 월 기준", "당해년도 월 누적"], horizontal=True)
     shown_balance = balance_month if bmode == "선택 월 기준" else balance_ytd
 
-    if mobile_mode:
-        st.metric("수입합계", fmt_amount(income_sum))
-        st.metric("지출합계", fmt_amount(expense_sum))
-        st.metric("잔액", fmt_amount(shown_balance))
-    else:
-        m1, m2, m3 = st.columns(3)
-        m1.metric("수입합계", fmt_amount(income_sum))
-        m2.metric("지출합계", fmt_amount(expense_sum))
-        m3.metric("잔액", fmt_amount(shown_balance))
+    m1, m2, m3 = st.columns(3)
+    m1.metric("수입합계", fmt_amount(income_sum))
+    m2.metric("지출합계", fmt_amount(expense_sum))
+    m3.metric("잔액", fmt_amount(shown_balance))
 
     # ---- 예산현황 ----
     st.markdown("#### 예산현황")
@@ -523,15 +516,11 @@ with tabs[1]:
     st.subheader("예산 설정")
     st.caption("저장을 두 번 눌러도 동일 월/카테고리/목표금액은 한 번만 반영됩니다.")
 
-    if mobile_mode:
+    c1, c2 = st.columns(2)
+    with c1:
         by = st.selectbox("연도", list(range(today.year - 3, today.year + 2)), index=3, key="by")
+    with c2:
         bm = st.selectbox("월", list(range(1, 13)), index=today.month - 1, key="bm")
-    else:
-        c1, c2 = st.columns(2)
-        with c1:
-            by = st.selectbox("연도", list(range(today.year - 3, today.year + 2)), index=3, key="by")
-        with c2:
-            bm = st.selectbox("월", list(range(1, 13)), index=today.month - 1, key="bm")
     bym = ym_from_year_month(by, bm)
 
     with st.form("budget_add_form", clear_on_submit=True):
@@ -627,15 +616,11 @@ with tabs[2]:
         )
 
     st.markdown("#### 2) 월에 고정지출 반영하기")
-    if mobile_mode:
+    c1, c2 = st.columns(2)
+    with c1:
         fy = st.selectbox("연도", list(range(today.year - 3, today.year + 2)), index=3, key="fy")
+    with c2:
         fm = st.selectbox("월", list(range(1, 13)), index=today.month - 1, key="fm")
-    else:
-        c1, c2 = st.columns(2)
-        with c1:
-            fy = st.selectbox("연도", list(range(today.year - 3, today.year + 2)), index=3, key="fy")
-        with c2:
-            fm = st.selectbox("월", list(range(1, 13)), index=today.month - 1, key="fm")
     fym = ym_from_year_month(fy, fm)
 
     if st.button("선택 월에 반영", type="primary", disabled=rules.empty):
@@ -747,15 +732,10 @@ def simple_inout_tab(sheet_key: str, title: str):
     exp = int(df.loc[df["type"] == "지출", "amount"].sum())
     diff = inc - exp
 
-    if mobile_mode:
-        st.metric("전체 수입합계", fmt_amount(inc))
-        st.metric("전체 지출합계", fmt_amount(exp))
-        st.metric("차액", fmt_amount(diff))
-    else:
-        c1, c2, c3 = st.columns(3)
-        c1.metric("전체 수입합계", fmt_amount(inc))
-        c2.metric("전체 지출합계", fmt_amount(exp))
-        c3.metric("차액", fmt_amount(diff))
+    c1, c2, c3 = st.columns(3)
+    c1.metric("전체 수입합계", fmt_amount(inc))
+    c2.metric("전체 지출합계", fmt_amount(exp))
+    c3.metric("차액", fmt_amount(diff))
 
     st.markdown("#### 전체 내역")
     show = df[["day", "type", "amount", "memo"]].rename(columns={"day": "날짜", "type": "구분", "amount": "금액", "memo": "메모"})
