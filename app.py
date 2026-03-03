@@ -1,6 +1,8 @@
 import re
 import uuid
 from datetime import datetime
+import time
+import random
 
 import pandas as pd
 import streamlit as st
@@ -113,6 +115,28 @@ def col_to_a1(col_idx_1based: int) -> str:
         s = chr(65 + r) + s
     return s
 
+
+def with_retry(fn, *, tries: int = 5, base_sleep: float = 0.6):
+    """Google Sheets API는 429/5xx가 간헐적으로 발생할 수 있어 재시도로 안정성 확보."""
+    last_err = None
+    for i in range(tries):
+        try:
+            return fn()
+        except Exception as e:
+            last_err = e
+            sleep = base_sleep * (2 ** i) + random.uniform(0, 0.25)
+            time.sleep(sleep)
+    raise last_err
+
+
+
+def run_once(key: str) -> bool:
+    """버튼/폼을 연타해도 같은 rerun에서 중복 실행을 줄이기 위한 간단한 락."""
+    if st.session_state.get(key):
+        return False
+    st.session_state[key] = True
+    return True
+
 # -----------------------------
 # Google Sheets
 # -----------------------------
@@ -134,14 +158,14 @@ def gs_book():
 def ws(key: str):
     return gs_book().worksheet(SHEET_NAMES[key])
 
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=600)
 def read_df(key: str) -> pd.DataFrame:
     w = ws(key)
-    rows = w.get_all_records()
+    rows = with_retry(lambda: w.get_all_records())
     return pd.DataFrame(rows)
 
 def get_headers(key: str) -> list[str]:
-    return ws(key).row_values(1)
+    return with_retry(lambda: ws(key).row_values(1))
 
 def safe_append_rows(key: str, rows: list[dict], dedup_key_field: str | None = None):
     """
@@ -152,7 +176,7 @@ def safe_append_rows(key: str, rows: list[dict], dedup_key_field: str | None = N
         return 0, 0
 
     w = ws(key)
-    headers = w.row_values(1)
+    headers = with_retry(lambda: w.row_values(1))
     if not headers:
         raise RuntimeError(f"{key} 시트 1행 헤더가 비어있습니다.")
 
@@ -161,7 +185,7 @@ def safe_append_rows(key: str, rows: list[dict], dedup_key_field: str | None = N
         col_idx = headers.index(dedup_key_field) + 1
         a1 = col_to_a1(col_idx)
         # 해당 컬럼만 읽기(최소 읽기)
-        col_vals = w.get(f"{a1}2:{a1}")
+        col_vals = with_retry(lambda: w.get(f"{a1}2:{a1}"))
         existing = set([r[0] for r in col_vals if r and r[0]])
 
     to_write = []
@@ -179,7 +203,7 @@ def safe_append_rows(key: str, rows: list[dict], dedup_key_field: str | None = N
     if not to_write:
         return 0, skipped
 
-    w.append_rows(to_write, value_input_option="USER_ENTERED")
+    with_retry(lambda: w.append_rows(to_write, value_input_option="USER_ENTERED"))
     return len(to_write), skipped
 
 def find_row_by_id(key: str, row_id: str):
@@ -193,7 +217,7 @@ def find_row_by_id(key: str, row_id: str):
     idx = headers.index("id") + 1
     a1 = col_to_a1(idx)
     w = ws(key)
-    vals = w.get(f"{a1}2:{a1}")
+    vals = with_retry(lambda: w.get(f"{a1}2:{a1}"))
     ids = [r[0] for r in vals if r]
     try:
         pos0 = ids.index(row_id)  # 0-based within data (excluding header)
@@ -228,7 +252,7 @@ def update_row_by_id(key: str, row_id: str, updates: dict):
     cell_objs = []
     for rr, cc, vv in cells:
         cell_objs.append(gspread.Cell(rr, cc, vv))
-    w.update_cells(cell_objs, value_input_option="USER_ENTERED")
+    with_retry(lambda: w.update_cells(cell_objs, value_input_option="USER_ENTERED"))
     return True, "수정 완료"
 
 def delete_row_by_id(key: str, row_id: str):
@@ -236,13 +260,19 @@ def delete_row_by_id(key: str, row_id: str):
     r = find_row_by_id(key, row_id)
     if r is None:
         return False, "해당 ID 행을 찾지 못했습니다."
-    w.delete_rows(r)
+    with_retry(lambda: w.delete_rows(r))
     return True, "삭제 완료"
 
 # -----------------------------
 # App
 # -----------------------------
 st.title("📒 가계부 웹앱")
+
+st.caption("데이터가 안 보이거나 최신이 아닐 때는 아래 버튼으로 새로고침하세요.")
+if st.button("🔄 데이터 새로고침"):
+    read_df.clear()
+    st.success("새로고침 완료")
+
 
 tabs = st.tabs(TAB_NAMES)
 today = datetime.now()
@@ -284,8 +314,7 @@ with tabs[0]:
         with a2:
             memo = st.text_input("메모", value="")
         ok = st.form_submit_button("저장", type="primary")
-
-    if ok:
+    if ok and run_once("ledger_add"):
         parsed = parse_yyyy_mm_dd(date_str)
         amt = to_int_amount(amount_str)
         if not parsed:
@@ -311,7 +340,7 @@ with tabs[0]:
                 "dedup_key": dk,
             }
             wrote, skipped = safe_append_rows("ledger", [row], dedup_key_field="dedup_key")
-            st.cache_data.clear()
+            read_df.clear()
             if wrote:
                 st.success("저장 완료")
             else:
@@ -438,8 +467,7 @@ with tabs[0]:
                 do_update = st.form_submit_button("수정 저장", type="primary")
             with cbtn2:
                 do_delete = st.form_submit_button("삭제", type="secondary")
-
-        if do_update:
+        if do_update and run_once("ledger_update"):
             parsed = parse_yyyy_mm_dd(new_date)
             amt = to_int_amount(new_amt)
             if not parsed:
@@ -465,12 +493,11 @@ with tabs[0]:
                         "dedup_key": dk,  # 컬럼 없으면 자동 무시됨
                     },
                 )
-                st.cache_data.clear()
+                read_df.clear()
                 st.success(msg) if ok2 else st.error(msg)
-
-        if do_delete:
+        if do_delete and run_once("ledger_delete"):
             ok2, msg = delete_row_by_id("ledger", sel_id)
-            st.cache_data.clear()
+            read_df.clear()
             st.success(msg) if ok2 else st.error(msg)
 
 # =============================
@@ -491,8 +518,7 @@ with tabs[1]:
         cat = st.selectbox("지출 카테고리", EXPENSE_CATS)
         target_str = st.text_input("목표금액", placeholder="예: 300,000")
         ok = st.form_submit_button("저장하기", type="primary")
-
-    if ok:
+    if ok and run_once("budget_add"):
         t = to_int_amount(target_str)
         if t is None or t < 0:
             st.error("목표금액은 0 이상의 숫자로 입력해 주세요.")
@@ -507,7 +533,7 @@ with tabs[1]:
                 "dedup_key": dk,
             }
             wrote, _ = safe_append_rows("budgets", [row], dedup_key_field="dedup_key")
-            st.cache_data.clear()
+            read_df.clear()
             st.success("저장 완료") if wrote else st.info("이미 동일 예산이 있어 추가하지 않았습니다.")
 
     st.markdown("#### 해당 월 예산 목록")
@@ -542,8 +568,7 @@ with tabs[2]:
         amount_str = st.text_input("금액", placeholder="예: 55,000")
         memo = st.text_input("메모", placeholder="예: KT / 매달")
         ok = st.form_submit_button("규칙 저장", type="primary")
-
-    if ok:
+    if ok and run_once("fixed_rule_add"):
         amt = to_int_amount(amount_str)
         if not name.strip():
             st.error("항목명을 입력해 주세요.")
@@ -559,7 +584,7 @@ with tabs[2]:
                 "created_at": now_str(),
             }
             safe_append_rows("fixed_rules", [row])
-            st.cache_data.clear()
+            read_df.clear()
             st.success("규칙 저장 완료")
 
     rules = read_df("fixed_rules")
@@ -586,8 +611,7 @@ with tabs[2]:
     with c2:
         fm = st.selectbox("월", list(range(1, 13)), index=today.month - 1, key="fm")
     fym = ym_from_year_month(fy, fm)
-
-    if st.button("선택 월에 반영", type="primary", disabled=rules.empty):
+    if st.button("선택 월에 반영", type="primary", disabled=rules.empty) and run_once("fixed_apply"):
         applied_rows = []
         ledger_rows = []
 
@@ -627,10 +651,10 @@ with tabs[2]:
         # fixed_applied에서 중복 걸러졌더라도, ledger가 dedup_key를 갖고 있으면 ledger에서도 중복이 걸러짐
         if wrote:
             safe_append_rows("ledger", ledger_rows, dedup_key_field="dedup_key")
-            st.cache_data.clear()
+            read_df.clear()
             st.success(f"{wrote}건 반영 완료 (중복 {skipped}건 제외)")
         else:
-            st.cache_data.clear()
+            read_df.clear()
             st.info(f"이미 해당 월에 동일 고정지출이 반영되어 있습니다. (중복 {skipped}건)")
 
     applied = read_df("fixed_applied")
@@ -663,8 +687,7 @@ def simple_inout_tab(sheet_key: str, title: str):
         amt_str = st.text_input("금액", value="", key=f"{sheet_key}_amt")
         memo = st.text_input("메모", value="", key=f"{sheet_key}_memo")
         ok = st.form_submit_button("저장", type="primary")
-
-    if ok:
+    if ok and run_once(f"{sheet_key}_add"):
         parsed = parse_yyyy_mm_dd(date_str)
         amt = to_int_amount(amt_str)
         if not parsed:
@@ -682,7 +705,7 @@ def simple_inout_tab(sheet_key: str, title: str):
                 "created_at": now_str(),
             }
             safe_append_rows(sheet_key, [row])
-            st.cache_data.clear()
+            read_df.clear()
             st.success("저장 완료")
 
     df = read_df(sheet_key)
@@ -729,8 +752,7 @@ with tabs[5]:
         card_name = st.text_input("카드명", placeholder="예: 현대카드 M")
         benefit = st.text_area("혜택 메모", height=80, placeholder="예: 대중교통 10% ...")
         ok = st.form_submit_button("저장", type="primary")
-
-    if ok:
+    if ok and run_once("card_add"):
         if not card_name.strip():
             st.error("카드명을 입력해 주세요.")
         else:
@@ -741,7 +763,7 @@ with tabs[5]:
                 "created_at": now_str(),
             }
             safe_append_rows("cards", [row])
-            st.cache_data.clear()
+            read_df.clear()
             st.success("저장 완료")
 
     cards = read_df("cards")
@@ -770,8 +792,7 @@ with tabs[5]:
             billing_day = st.selectbox("결제일(일)", list(range(1, 32)))
         memo = st.text_input("메모", placeholder="예: 프리미엄")
         ok2 = st.form_submit_button("정기결제 저장", type="primary", disabled=not bool(card_list))
-
-    if ok2:
+    if ok2 and run_once("sub_add"):
         amt = to_int_amount(amt_str)
         if not merchant.strip():
             st.error("가맹점/서비스명을 입력해 주세요.")
@@ -788,7 +809,7 @@ with tabs[5]:
                 "created_at": now_str(),
             }
             safe_append_rows("subscriptions", [row])
-            st.cache_data.clear()
+            read_df.clear()
             st.success("저장 완료")
 
     subs = read_df("subscriptions")
