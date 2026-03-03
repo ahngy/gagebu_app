@@ -445,7 +445,7 @@ with tabs[0]:
             new_cat = st.selectbox("카테고리", new_cats, index=(new_cats.index(sel_row["category"]) if sel_row["category"] in new_cats else 0))
             new_amt = st.text_input("금액", value=fmt_amount(int(sel_row["amount"])))
             new_memo = st.text_input("메모", value=str(sel_row.get("memo","")))
-            do_u = st.form_submit_button("수정 저장", type="primary")
+            do_u = st.form_submit_button("수정", type="primary")
             do_d = st.form_submit_button("삭제", type="secondary")
 
         if do_u and run_once("ledger_update_once"):
@@ -508,7 +508,7 @@ with tabs[1]:
         row = b2[b2["id"].astype(str)==str(sel_id)].iloc[0]
         with st.form("budget_edit"):
             new_target = st.text_input("목표금액", value=fmt_amount(int(row["target"])))
-            do_u = st.form_submit_button("수정 저장", type="primary")
+            do_u = st.form_submit_button("수정", type="primary")
             do_d = st.form_submit_button("삭제", type="secondary")
         if do_u and run_once("budget_update_once"):
             t = to_int_amount(new_target)
@@ -570,7 +570,7 @@ with tabs[2]:
             new_name = st.text_input("항목명", value=str(row["name"]))
             new_amt = st.text_input("금액", value=fmt_amount(int(row["amount"])))
             new_memo = st.text_input("메모", value=str(row.get("memo","")))
-            do_u = st.form_submit_button("수정 저장", type="primary")
+            do_u = st.form_submit_button("수정", type="primary")
             do_d = st.form_submit_button("삭제", type="secondary")
         if do_u and run_once("fixed_rule_update_once"):
             amt = to_int_amount(new_amt)
@@ -631,7 +631,7 @@ with tabs[2]:
             new_day = st.selectbox("날짜(일)", list(range(1, 32)), index=max(0, int(str(row["day"])[:2]) - 1))
             new_amt = st.text_input("금액", value=fmt_amount(int(row["amount"])))
             new_memo = st.text_input("메모", value=str(row.get("memo","")))
-            do_u = st.form_submit_button("수정 저장", type="primary")
+            do_u = st.form_submit_button("수정", type="primary")
             do_d = st.form_submit_button("삭제", type="secondary")
         if do_u and run_once("fixed_applied_update_once"):
             amt = to_int_amount(new_amt)
@@ -712,7 +712,7 @@ def inout_tab(sheet_key: str, title: str):
         new_day = st.selectbox("날짜(일)", list(range(1,32)), index=max(0,int(str(row["day"])[:2])-1))
         new_amt = st.text_input("금액", value=fmt_amount(int(row["amount"])))
         new_memo = st.text_input("메모", value=str(row.get("memo","")))
-        do_u = st.form_submit_button("수정 저장", type="primary")
+        do_u = st.form_submit_button("수정", type="primary")
         do_d = st.form_submit_button("삭제", type="secondary")
     if do_u and run_once(f"{sheet_key}_update_once"):
         amt = to_int_amount(new_amt)
@@ -771,7 +771,7 @@ with tabs[5]:
         with st.form("card_edit"):
             new_name = st.text_input("카드명", value=str(row["card_name"]))
             new_benefit = st.text_area("혜택 메모", value=str(row.get("benefit_memo","")), height=80)
-            do_u = st.form_submit_button("수정 저장", type="primary")
+            do_u = st.form_submit_button("수정", type="primary")
             do_d = st.form_submit_button("삭제", type="secondary")
         if do_u and run_once("card_update_once"):
             if not new_name.strip():
@@ -831,7 +831,7 @@ with tabs[5]:
             new_amt = st.text_input("금액", value=fmt_amount(int(row["amount"])))
             new_day = st.selectbox("결제일(일)", list(range(1,32)), index=int(row["billing_day"])-1)
             new_memo = st.text_input("메모", value=str(row.get("memo","")))
-            do_u = st.form_submit_button("수정 저장", type="primary")
+            do_u = st.form_submit_button("수정", type="primary")
             do_d = st.form_submit_button("삭제", type="secondary")
         if do_u and run_once("sub_update_once"):
             amt = to_int_amount(new_amt)
