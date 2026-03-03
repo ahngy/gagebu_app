@@ -308,7 +308,7 @@ def record_selector(df: pd.DataFrame, label_col: str, key: str):
     labels = df[label_col].tolist()
     ids = df["id"].astype(str).tolist()
     mapping = dict(zip(labels, ids))
-    sel = st.selectbox("대상 선택", labels, key=key)
+    sel = st.selectbox("수정할 내역 선택", labels, key=key)
     return sel, mapping[sel]
 
 # =============================
@@ -318,7 +318,7 @@ with tabs[0]:
     st.subheader("가계부")
     y, m, ym = month_picker("ledger")
 
-    st.markdown("#### 내역 입력 (달력 선택)")
+    st.markdown("#### 내역 입력")
     entry_type = st.selectbox("구분", ["수입", "지출"], key="ledger_type")
     cats = INCOME_CATS if entry_type == "수입" else EXPENSE_CATS
     if st.session_state.get("ledger_last_type") != entry_type:
@@ -498,7 +498,7 @@ with tabs[1]:
         view = b[["category","target"]].rename(columns={"category":"카테고리","target":"목표금액"})
         view["__ord"] = view["카테고리"].map(cat_order_key)
         view = view.sort_values(["__ord","카테고리"]).drop(columns="__ord")
-        st.markdown("#### 해당 월 예산 목록")
+        st.markdown("#### 예산 목록")
         st.dataframe(view.style.format({"목표금액": lambda x: fmt_amount(int(x))}).set_properties(subset=["목표금액"], **{"text-align":"right"}), use_container_width=True, hide_index=True)
 
         st.markdown("#### 예산 수정/삭제")
@@ -531,13 +531,13 @@ with tabs[2]:
     st.subheader("고정지출")
     st.caption("카테고리는 자동으로 '고정지출'로 저장됩니다.")
 
-    st.markdown("#### 1) 규칙 등록")
+    st.markdown("#### 내역")
     with st.form("fixed_rule_add", clear_on_submit=True):
         name = st.text_input("항목명", placeholder="예: 통신비")
         st.text_input("카테고리", value="고정지출", disabled=True)
         amount_str = st.text_input("금액", placeholder="예: 55,000")
         memo = st.text_input("메모", placeholder="예: KT / 매달")
-        ok = st.form_submit_button("규칙 저장", type="primary")
+        ok = st.form_submit_button("저장", type="primary")
     if ok and run_once("fixed_rule_add_once"):
         amt = to_int_amount(amount_str)
         if not name.strip():
@@ -548,20 +548,20 @@ with tabs[2]:
             row = {"id":str(uuid.uuid4()),"name":name.strip(),"amount":amt,"memo":memo.strip(),"created_at":now_str()}
             safe_append_rows("fixed_rules", [row])
             read_df.clear()
-            st.success("규칙 저장 완료")
+            st.success("저장 완료")
 
     rules = ensure_cols(read_df("fixed_rules"), ["id","name","amount","memo","created_at"])
     if not rules.empty:
         rules["amount"] = pd.to_numeric(rules["amount"], errors="coerce").fillna(0).astype(int)
 
-    st.markdown("#### 등록된 규칙")
+    st.markdown("#### 고정지출 내역")
     if rules.empty:
-        st.info("등록된 규칙이 없습니다.")
+        st.info("등록된 내역이 없습니다.")
     else:
         view = rules[["name","amount","memo"]].rename(columns={"name":"항목","amount":"금액","memo":"메모"})
         st.dataframe(view.style.format({"금액": lambda x: fmt_amount(int(x))}).set_properties(subset=["금액"], **{"text-align":"right"}), use_container_width=True, hide_index=True)
 
-        st.markdown("#### 규칙 수정/삭제")
+        st.markdown("#### 수정/삭제")
         r2 = rules.copy()
         r2["label"] = r2.apply(lambda r: f"{r['name']} | {fmt_amount(int(r['amount']))}", axis=1)
         _, sel_id = record_selector(r2, "label", "fixed_rule_pick")
@@ -588,12 +588,12 @@ with tabs[2]:
             st.success(msg) if ok2 else st.error(msg)
 
     st.markdown("---")
-    st.markdown("#### 2) 월에 반영")
+    st.markdown("#### 반영하기")
     fy, fm, fym = month_picker("fixed_apply")
     apply_day = st.selectbox("반영일(일)", list(range(1, 32)), index=0)
     apply_day_str = day_k(int(apply_day))
 
-    if st.button("선택 월에 반영", type="primary", disabled=rules.empty):
+    if st.button("해당 월에 반영", type="primary", disabled=rules.empty):
         if run_once("fixed_apply_once"):
             applied_rows, ledger_rows = [], []
             for _, r in rules.iterrows():
@@ -653,7 +653,7 @@ with tabs[2]:
 # =============================
 def inout_tab(sheet_key: str, title: str):
     st.subheader(title)
-    st.markdown("#### 내역 입력 (달력 선택)")
+    st.markdown("#### 내역 입력")
     t = st.selectbox("구분", ["수입", "지출"], key=f"{sheet_key}_type")
 
     with st.form(f"{sheet_key}_add", clear_on_submit=True):
@@ -739,7 +739,7 @@ with tabs[4]:
 with tabs[5]:
     st.subheader("신용카드")
 
-    st.markdown("#### 1) 카드 혜택 정리")
+    st.markdown("#### 카드 혜택 정리")
     with st.form("card_add", clear_on_submit=True):
         card_name = st.text_input("카드명", placeholder="예: 현대카드 M")
         benefit = st.text_area("혜택 메모", height=80, placeholder="예: 대중교통 10% ...")
@@ -786,7 +786,7 @@ with tabs[5]:
             st.success(msg) if ok2 else st.error(msg)
 
     st.markdown("---")
-    st.markdown("#### 2) 정기결제 관리")
+    st.markdown("#### 정기결제 관리")
     with st.form("sub_add", clear_on_submit=True):
         sub_card = st.selectbox("카드", card_list if card_list else ["(카드 먼저 등록)"], disabled=not bool(card_list))
         merchant = st.text_input("가맹점/서비스", placeholder="예: 넷플릭스")
@@ -811,11 +811,11 @@ with tabs[5]:
         st.info("정기결제 내역이 없습니다.")
     else:
         subs["amount"] = pd.to_numeric(subs["amount"], errors="coerce").fillna(0).astype(int)
-        st.markdown("#### 3) 카드별 정기결제 총액")
+        st.markdown("#### 카드별 정기결제 총액")
         total_by_card = subs.groupby("card_name")["amount"].sum().reset_index().rename(columns={"card_name":"카드명","amount":"총액"})
         st.dataframe(total_by_card.style.format({"총액": lambda x: fmt_amount(int(x))}).set_properties(subset=["총액"], **{"text-align":"right"}), use_container_width=True, hide_index=True)
 
-        st.markdown("#### 4) 카드 선택 → 정기결제 내역")
+        st.markdown("#### 카드별 정기결제 내역")
         sel = st.selectbox("카드 선택", sorted(subs["card_name"].astype(str).unique().tolist()), key="sub_card_pick")
         sub_view = subs[subs["card_name"].astype(str)==sel].copy()
         show = sub_view[["merchant","amount","billing_day","memo"]].rename(columns={"merchant":"가맹점/서비스","amount":"금액","billing_day":"결제일","memo":"메모"})
