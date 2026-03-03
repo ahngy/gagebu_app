@@ -1,8 +1,6 @@
 import re
 import uuid
 from datetime import datetime
-import time
-import random
 
 import pandas as pd
 import streamlit as st
@@ -16,36 +14,20 @@ from google.oauth2.service_account import Credentials
 # -----------------------------
 st.set_page_config(page_title="가계부", layout="centered", initial_sidebar_state="collapsed")
 
-
-# -----------------------------
-# iOS PWA viewport fix (홈화면에 추가 시 레이아웃/스케일 깨짐 방지)
-# -----------------------------
-components.html(
-    """
+# iOS 홈화면(PWA) viewport 안정화
+components.html("""
 <script>
-(function(){
-  // Ensure viewport meta for iOS PWA
-  const head = document.getElementsByTagName('head')[0];
-  if (!head) return;
+  const meta = document.createElement('meta');
+  meta.name = "viewport";
+  meta.content = "width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover";
+  document.getElementsByTagName('head')[0].appendChild(meta);
 
-  function upsertMeta(name, content){
-    let m = document.querySelector('meta[name="' + name + '"]');
-    if (!m){
-      m = document.createElement('meta');
-      m.setAttribute('name', name);
-      head.appendChild(m);
-    }
-    m.setAttribute('content', content);
-  }
-
-  upsertMeta('viewport', 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover');
-  upsertMeta('theme-color', '#ffffff');
-})();
+  const theme = document.createElement('meta');
+  theme.name = "theme-color";
+  theme.content = "#0e1117";
+  document.getElementsByTagName('head')[0].appendChild(theme);
 </script>
-""",
-    height=0,
-)
-
+""", height=0)
 
 INCOME_CATS = ["월급", "부수입", "이자", "캐시백", "기타"]
 EXPENSE_CATS = ["식재료", "외식/배달", "생활", "육아", "여가", "교통/유류", "의료", "기타"]
@@ -69,61 +51,118 @@ SHEET_NAMES = {
 st.markdown(
     """
 <style>
-/* 기본 레이아웃 */
-button, input, textarea {font-size: 16px !important;} /* iOS zoom 방지 */
+/* ---------------------------
+   Dark background + White inputs
+   --------------------------- */
+:root{
+  --bg:#0e1117;
+  --panel:#111827;
+  --text:#f3f4f6;
+  --muted:#9ca3af;
+  --border:#2a2f3a;
+  --accent:#ef4444;
+}
 
-/* 컨테이너: 데스크톱은 적당히, 모바일은 전체폭 */
-.block-container {padding-top: 1.0rem; padding-bottom: 3.0rem; max-width: 860px;}
-@media (max-width: 480px) {
+/* App background */
+html, body, [data-testid="stAppViewContainer"], [data-testid="stHeader"]{
+  background: var(--bg) !important;
+}
+
+/* Main container */
+.block-container{
+  padding-top: 0.8rem;
+  padding-bottom: 3.0rem;
+  max-width: 860px;
+}
+
+/* Typography */
+h1, h2, h3, h4, h5, h6 { color: var(--text) !important; }
+p, label, span, small, div { color: inherit; }
+[data-testid="stMarkdownContainer"] p { color: var(--muted) !important; }
+
+/* Sticky tabs (dark) */
+div[data-testid="stTabs"]{
+  position: sticky;
+  top: 0;
+  z-index: 999;
+  background: var(--bg);
+  padding-top: 0.2rem;
+  border-bottom: 1px solid var(--border);
+}
+div[data-testid="stTabs"] button{
+  padding: 10px 12px;
+  color: var(--text) !important;
+}
+
+/* Tabs scroll on mobile */
+div[data-testid="stTabs"] [data-baseweb="tab-list"]{
+  overflow-x:auto !important;
+  flex-wrap:nowrap !important;
+  -webkit-overflow-scrolling:touch !important;
+}
+
+/* iOS zoom 방지 */
+button, input, textarea { font-size: 16px !important; }
+
+/* White input surfaces */
+input, textarea{
+  background:#ffffff !important;
+  color:#111827 !important;
+  border:1px solid #e5e7eb !important;
+  border-radius:12px !important;
+}
+[data-baseweb="select"] > div{
+  background:#ffffff !important;
+  color:#111827 !important;
+  border:1px solid #e5e7eb !important;
+  border-radius:12px !important;
+}
+[data-baseweb="input"] > div{
+  background:#ffffff !important;
+  border:1px solid #e5e7eb !important;
+  border-radius:12px !important;
+}
+
+/* Form card as white panel */
+[data-testid="stForm"]{
+  background:#ffffff !important;
+  border-radius:16px !important;
+  padding:14px !important;
+  border:1px solid #e5e7eb !important;
+}
+
+/* Buttons */
+.stButton>button{
+  border-radius:14px !important;
+}
+
+/* Dataframe header readability */
+[data-testid="stDataFrame"]{
+  border-radius:14px;
+  overflow:hidden;
+}
+
+/* Mobile full width */
+@media (max-width: 480px){
   .block-container{
     max-width: 100% !important;
     padding-left: 0.8rem !important;
     padding-right: 0.8rem !important;
     padding-top: 0.6rem !important;
   }
-  h1 {font-size: 2.0rem !important; line-height: 1.1 !important; margin-bottom: 0.3rem !important;}
-  h2, h3 {margin-top: 0.8rem !important;}
-}
-
-/* Sticky Tabs */
-div[data-testid="stTabs"] {position: sticky; top: 0; z-index: 999; background: #ffffff; padding-top: 0.2rem;}
-div[data-testid="stTabs"] button {padding: 10px 12px;}
-
-/* 탭이 잘리지 않게 가로 스크롤 */
-div[data-testid="stTabs"] [data-baseweb="tab-list"]{
-  overflow-x: auto !important;
-  flex-wrap: nowrap !important;
-  -webkit-overflow-scrolling: touch !important;
-}
-
-/* iOS/PWA 다크모드 꼬임 방지: 배경/텍스트 대비 보정 */
-html, body, [data-testid="stAppViewContainer"], [data-testid="stHeader"], [data-testid="stApp"] {
-  background: #ffffff !important;
-  color: #111111 !important;
+  h1{ font-size:2.0rem !important; line-height:1.05 !important; }
 }
 </style>
 """,
     unsafe_allow_html=True,
 )
 
+
 # -----------------------------
 # Helpers
 # -----------------------------
 def now_str() -> str:
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-
-def with_retry(fn, *, tries: int = 5, base_sleep: float = 0.6):
-    """Retry wrapper for Google Sheets calls (handles 429/5xx bursts)."""
-    last = None
-    for i in range(tries):
-        try:
-            return fn()
-        except Exception as e:
-            last = e
-            # exponential backoff + jitter
-            time.sleep(base_sleep * (2 ** i) + random.uniform(0, 0.2))
-    raise last
 
 def ym_from_year_month(year: int, month: int) -> str:
     return f"{year:04d}-{month:02d}"
@@ -206,14 +245,13 @@ def gs_client():
 def gs_book():
     return gs_client().open_by_url(st.secrets["GSHEET_URL"])
 
-@st.cache_resource
 def ws(key: str):
-    return with_retry(lambda: gs_book().worksheet(SHEET_NAMES[key]))
+    return gs_book().worksheet(SHEET_NAMES[key])
 
-@st.cache_data(ttl=600)
+@st.cache_data(ttl=60)
 def read_df(key: str) -> pd.DataFrame:
     w = ws(key)
-    rows = with_retry(lambda: w.get_all_records())
+    rows = w.get_all_records()
     return pd.DataFrame(rows)
 
 def get_headers(key: str) -> list[str]:
