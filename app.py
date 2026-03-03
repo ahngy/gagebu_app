@@ -1,8 +1,6 @@
 import re
 import uuid
 from datetime import datetime
-import time
-import random
 
 import pandas as pd
 import streamlit as st
@@ -37,14 +35,38 @@ SHEET_NAMES = {
 st.markdown(
     """
 <style>
+/* 기본 레이아웃 */
 .block-container {padding-top: 1.0rem; padding-bottom: 3.0rem; max-width: 860px;}
 button, input, textarea {font-size: 16px !important;} /* iOS zoom 방지 */
+
+/* Sticky Tabs */
 div[data-testid="stTabs"] {position: sticky; top: 0; z-index: 999; background: white; padding-top: 0.2rem;}
 div[data-testid="stTabs"] button {padding: 10px 12px;}
+
+/* ✅ iPhone(PWA)에서 레이아웃 안정화 */
+@media (max-width: 480px) {
+  .block-container { padding-top: 0.6rem !important; padding-left: 0.8rem !important; padding-right: 0.8rem !important; }
+  h1 { font-size: 2.0rem !important; line-height: 1.1 !important; margin-bottom: 0.3rem !important; }
+  h2 { font-size: 1.3rem !important; margin-top: 0.8rem !important; }
+
+  /* 탭이 잘리지 않게 가로 스크롤 */
+  div[data-testid="stTabs"] [data-baseweb="tab-list"]{
+    overflow-x: auto !important;
+    flex-wrap: nowrap !important;
+    -webkit-overflow-scrolling: touch !important;
+  }
+  div[data-testid="stTabs"] button { padding: 8px 10px !important; }
+}
+
+/* ✅ 다크모드/PWA에서 배경 꼬임 방지 */
+html, body, [data-testid="stAppViewContainer"], [data-testid="stHeader"], [data-testid="stApp"] {
+  background: #ffffff !important;
+}
 </style>
 """,
     unsafe_allow_html=True,
 )
+
 
 # -----------------------------
 # Helpers
@@ -115,28 +137,6 @@ def col_to_a1(col_idx_1based: int) -> str:
         s = chr(65 + r) + s
     return s
 
-
-def with_retry(fn, *, tries: int = 5, base_sleep: float = 0.6):
-    """Google Sheets API는 429/5xx가 간헐적으로 발생할 수 있어 재시도로 안정성 확보."""
-    last_err = None
-    for i in range(tries):
-        try:
-            return fn()
-        except Exception as e:
-            last_err = e
-            sleep = base_sleep * (2 ** i) + random.uniform(0, 0.25)
-            time.sleep(sleep)
-    raise last_err
-
-
-
-def run_once(key: str) -> bool:
-    """버튼/폼을 연타해도 같은 rerun에서 중복 실행을 줄이기 위한 간단한 락."""
-    if st.session_state.get(key):
-        return False
-    st.session_state[key] = True
-    return True
-
 # -----------------------------
 # Google Sheets
 # -----------------------------
@@ -158,14 +158,14 @@ def gs_book():
 def ws(key: str):
     return gs_book().worksheet(SHEET_NAMES[key])
 
-@st.cache_data(ttl=600)
+@st.cache_data(ttl=60)
 def read_df(key: str) -> pd.DataFrame:
     w = ws(key)
-    rows = with_retry(lambda: w.get_all_records())
+    rows = w.get_all_records()
     return pd.DataFrame(rows)
 
 def get_headers(key: str) -> list[str]:
-    return with_retry(lambda: ws(key).row_values(1))
+    return ws(key).row_values(1)
 
 def safe_append_rows(key: str, rows: list[dict], dedup_key_field: str | None = None):
     """
@@ -176,7 +176,7 @@ def safe_append_rows(key: str, rows: list[dict], dedup_key_field: str | None = N
         return 0, 0
 
     w = ws(key)
-    headers = with_retry(lambda: w.row_values(1))
+    headers = w.row_values(1)
     if not headers:
         raise RuntimeError(f"{key} 시트 1행 헤더가 비어있습니다.")
 
@@ -185,7 +185,7 @@ def safe_append_rows(key: str, rows: list[dict], dedup_key_field: str | None = N
         col_idx = headers.index(dedup_key_field) + 1
         a1 = col_to_a1(col_idx)
         # 해당 컬럼만 읽기(최소 읽기)
-        col_vals = with_retry(lambda: w.get(f"{a1}2:{a1}"))
+        col_vals = w.get(f"{a1}2:{a1}")
         existing = set([r[0] for r in col_vals if r and r[0]])
 
     to_write = []
@@ -203,7 +203,7 @@ def safe_append_rows(key: str, rows: list[dict], dedup_key_field: str | None = N
     if not to_write:
         return 0, skipped
 
-    with_retry(lambda: w.append_rows(to_write, value_input_option="USER_ENTERED"))
+    w.append_rows(to_write, value_input_option="USER_ENTERED")
     return len(to_write), skipped
 
 def find_row_by_id(key: str, row_id: str):
@@ -217,7 +217,7 @@ def find_row_by_id(key: str, row_id: str):
     idx = headers.index("id") + 1
     a1 = col_to_a1(idx)
     w = ws(key)
-    vals = with_retry(lambda: w.get(f"{a1}2:{a1}"))
+    vals = w.get(f"{a1}2:{a1}")
     ids = [r[0] for r in vals if r]
     try:
         pos0 = ids.index(row_id)  # 0-based within data (excluding header)
@@ -252,7 +252,7 @@ def update_row_by_id(key: str, row_id: str, updates: dict):
     cell_objs = []
     for rr, cc, vv in cells:
         cell_objs.append(gspread.Cell(rr, cc, vv))
-    with_retry(lambda: w.update_cells(cell_objs, value_input_option="USER_ENTERED"))
+    w.update_cells(cell_objs, value_input_option="USER_ENTERED")
     return True, "수정 완료"
 
 def delete_row_by_id(key: str, row_id: str):
@@ -260,19 +260,13 @@ def delete_row_by_id(key: str, row_id: str):
     r = find_row_by_id(key, row_id)
     if r is None:
         return False, "해당 ID 행을 찾지 못했습니다."
-    with_retry(lambda: w.delete_rows(r))
+    w.delete_rows(r)
     return True, "삭제 완료"
 
 # -----------------------------
 # App
 # -----------------------------
 st.title("📒 가계부 웹앱")
-
-st.caption("데이터가 안 보이거나 최신이 아닐 때는 아래 버튼으로 새로고침하세요.")
-if st.button("🔄 데이터 새로고침"):
-    read_df.clear()
-    st.success("새로고침 완료")
-
 
 tabs = st.tabs(TAB_NAMES)
 today = datetime.now()
@@ -283,11 +277,15 @@ today = datetime.now()
 with tabs[0]:
     st.subheader("가계부")
 
-    c1, c2 = st.columns(2)
-    with c1:
+    if mobile_mode:
         year = st.selectbox("연도", list(range(today.year - 3, today.year + 2)), index=3, key="ly")
-    with c2:
         month = st.selectbox("월", list(range(1, 13)), index=today.month - 1, key="lm")
+    else:
+        c1, c2 = st.columns(2)
+        with c1:
+            year = st.selectbox("연도", list(range(today.year - 3, today.year + 2)), index=3, key="ly")
+        with c2:
+            month = st.selectbox("월", list(range(1, 13)), index=today.month - 1, key="lm")
     ym = ym_from_year_month(year, month)
 
     # ---- 입력 ----
@@ -302,19 +300,26 @@ with tabs[0]:
         st.session_state["ledger_last_type"] = entry_type
 
     with st.form("ledger_add_form", clear_on_submit=True):
-        d1, d2 = st.columns(2)
-        with d1:
+        if mobile_mode:
             date_str = st.text_input("날짜 (0000/00/00)", value=today.strftime("%Y/%m/%d"))
-        with d2:
             category = st.selectbox("카테고리", cats, key="ledger_category")
-
-        a1, a2 = st.columns([1, 2])
-        with a1:
             amount_str = st.text_input("금액 (예: 12,345 / -12,345)", value="")
-        with a2:
             memo = st.text_input("메모", value="")
+        else:
+            d1, d2 = st.columns(2)
+            with d1:
+                date_str = st.text_input("날짜 (0000/00/00)", value=today.strftime("%Y/%m/%d"))
+            with d2:
+                category = st.selectbox("카테고리", cats, key="ledger_category")
+
+            a1, a2 = st.columns([1, 2])
+            with a1:
+                amount_str = st.text_input("금액 (예: 12,345 / -12,345)", value="")
+            with a2:
+                memo = st.text_input("메모", value="")
         ok = st.form_submit_button("저장", type="primary")
-    if ok and run_once("ledger_add"):
+
+    if ok:
         parsed = parse_yyyy_mm_dd(date_str)
         amt = to_int_amount(amount_str)
         if not parsed:
@@ -333,13 +338,14 @@ with tabs[0]:
                 "ym": row_ym,
                 "day": row_day,
                 "type": entry_type,
+                "category": category,
                 "amount": amt,
                 "memo": memo.strip(),
                 "created_at": now_str(),
                 "dedup_key": dk,
             }
             wrote, skipped = safe_append_rows("ledger", [row], dedup_key_field="dedup_key")
-            read_df.clear()
+            st.cache_data.clear()
             if wrote:
                 st.success("저장 완료")
             else:
@@ -371,10 +377,15 @@ with tabs[0]:
     bmode = st.radio("잔액 보기", ["선택 월 기준", "당해년도 월 누적"], horizontal=True)
     shown_balance = balance_month if bmode == "선택 월 기준" else balance_ytd
 
-    m1, m2, m3 = st.columns(3)
-    m1.metric("수입합계", fmt_amount(income_sum))
-    m2.metric("지출합계", fmt_amount(expense_sum))
-    m3.metric("잔액", fmt_amount(shown_balance))
+    if mobile_mode:
+        st.metric("수입합계", fmt_amount(income_sum))
+        st.metric("지출합계", fmt_amount(expense_sum))
+        st.metric("잔액", fmt_amount(shown_balance))
+    else:
+        m1, m2, m3 = st.columns(3)
+        m1.metric("수입합계", fmt_amount(income_sum))
+        m2.metric("지출합계", fmt_amount(expense_sum))
+        m3.metric("잔액", fmt_amount(shown_balance))
 
     # ---- 예산현황 ----
     st.markdown("#### 예산현황")
@@ -417,10 +428,7 @@ with tabs[0]:
 
     # ---- 월 내역(지출) ----
     st.markdown("#### 지출내역")
-    show_fixed = st.checkbox("고정지출 포함", value=True)
     exp_rows = this_month[this_month["type"] == "지출"].copy()
-    if not show_fixed and not exp_rows.empty:
-        exp_rows = exp_rows[exp_rows["category"].astype(str) != "고정지출"].copy()
     if exp_rows.empty:
         st.info("선택한 월의 지출 내역이 없습니다.")
     else:
@@ -469,7 +477,8 @@ with tabs[0]:
                 do_update = st.form_submit_button("수정 저장", type="primary")
             with cbtn2:
                 do_delete = st.form_submit_button("삭제", type="secondary")
-        if do_update and run_once("ledger_update"):
+
+        if do_update:
             parsed = parse_yyyy_mm_dd(new_date)
             amt = to_int_amount(new_amt)
             if not parsed:
@@ -495,11 +504,12 @@ with tabs[0]:
                         "dedup_key": dk,  # 컬럼 없으면 자동 무시됨
                     },
                 )
-                read_df.clear()
+                st.cache_data.clear()
                 st.success(msg) if ok2 else st.error(msg)
-        if do_delete and run_once("ledger_delete"):
+
+        if do_delete:
             ok2, msg = delete_row_by_id("ledger", sel_id)
-            read_df.clear()
+            st.cache_data.clear()
             st.success(msg) if ok2 else st.error(msg)
 
 # =============================
@@ -509,18 +519,23 @@ with tabs[1]:
     st.subheader("예산 설정")
     st.caption("저장을 두 번 눌러도 동일 월/카테고리/목표금액은 한 번만 반영됩니다.")
 
-    c1, c2 = st.columns(2)
-    with c1:
+    if mobile_mode:
         by = st.selectbox("연도", list(range(today.year - 3, today.year + 2)), index=3, key="by")
-    with c2:
         bm = st.selectbox("월", list(range(1, 13)), index=today.month - 1, key="bm")
+    else:
+        c1, c2 = st.columns(2)
+        with c1:
+            by = st.selectbox("연도", list(range(today.year - 3, today.year + 2)), index=3, key="by")
+        with c2:
+            bm = st.selectbox("월", list(range(1, 13)), index=today.month - 1, key="bm")
     bym = ym_from_year_month(by, bm)
 
     with st.form("budget_add_form", clear_on_submit=True):
         cat = st.selectbox("지출 카테고리", EXPENSE_CATS)
         target_str = st.text_input("목표금액", placeholder="예: 300,000")
         ok = st.form_submit_button("저장하기", type="primary")
-    if ok and run_once("budget_add"):
+
+    if ok:
         t = to_int_amount(target_str)
         if t is None or t < 0:
             st.error("목표금액은 0 이상의 숫자로 입력해 주세요.")
@@ -529,13 +544,13 @@ with tabs[1]:
             row = {
                 "id": str(uuid.uuid4()),
                 "ym": bym,
-                "category": "고정지출",
+                "category": cat,
                 "target": t,
                 "created_at": now_str(),
                 "dedup_key": dk,
             }
             wrote, _ = safe_append_rows("budgets", [row], dedup_key_field="dedup_key")
-            read_df.clear()
+            st.cache_data.clear()
             st.success("저장 완료") if wrote else st.info("이미 동일 예산이 있어 추가하지 않았습니다.")
 
     st.markdown("#### 해당 월 예산 목록")
@@ -561,15 +576,17 @@ with tabs[1]:
 # =============================
 with tabs[2]:
     st.subheader("고정지출")
-    st.caption("규칙 등록 → 월 선택 반영 (중복 방지: 동일 월/항목/금액 1회). 고정지출은 예산현황 표에 포함되지 않습니다.")
+    st.caption("규칙 등록 → 월 선택 반영 (중복 방지: 동일 월/항목/금액 1회)")
 
     st.markdown("#### 1) 고정지출 규칙 등록")
     with st.form("fixed_rule_form", clear_on_submit=True):
         name = st.text_input("항목명", placeholder="예: 통신비")
+        category = st.selectbox("카테고리", EXPENSE_CATS, index=2)  # 기본 생활
         amount_str = st.text_input("금액", placeholder="예: 55,000")
         memo = st.text_input("메모", placeholder="예: KT / 매달")
         ok = st.form_submit_button("규칙 저장", type="primary")
-    if ok and run_once("fixed_rule_add"):
+
+    if ok:
         amt = to_int_amount(amount_str)
         if not name.strip():
             st.error("항목명을 입력해 주세요.")
@@ -579,17 +596,17 @@ with tabs[2]:
             row = {
                 "id": str(uuid.uuid4()),
                 "name": name.strip(),
+                "category": category,
                 "amount": amt,
                 "memo": memo.strip(),
                 "created_at": now_str(),
             }
             safe_append_rows("fixed_rules", [row])
-            read_df.clear()
+            st.cache_data.clear()
             st.success("규칙 저장 완료")
 
     rules = read_df("fixed_rules")
-    # 고정지출은 카테고리 없이 관리(예산현황과 무관)
-    rules = ensure_cols(rules, ["id", "name", "amount", "memo"])
+    rules = ensure_cols(rules, ["id", "name", "category", "amount", "memo"])
     if not rules.empty:
         rules["amount"] = pd.to_numeric(rules["amount"], errors="coerce").fillna(0).astype(int)
 
@@ -597,7 +614,7 @@ with tabs[2]:
     if rules.empty:
         st.info("등록된 규칙이 없습니다.")
     else:
-        v = rules[["name", "amount", "memo"]].rename(columns={"name": "항목", "amount": "금액", "memo": "메모"})
+        v = rules[["name", "category", "amount", "memo"]].rename(columns={"name": "항목", "category": "카테고리", "amount": "금액", "memo": "메모"})
         st.dataframe(
             v.style.format({"금액": lambda x: fmt_amount(int(x))})
             .set_properties(subset=["금액"], **{"text-align": "right"}),
@@ -606,19 +623,24 @@ with tabs[2]:
         )
 
     st.markdown("#### 2) 월에 고정지출 반영하기")
-    c1, c2 = st.columns(2)
-    with c1:
+    if mobile_mode:
         fy = st.selectbox("연도", list(range(today.year - 3, today.year + 2)), index=3, key="fy")
-    with c2:
         fm = st.selectbox("월", list(range(1, 13)), index=today.month - 1, key="fm")
+    else:
+        c1, c2 = st.columns(2)
+        with c1:
+            fy = st.selectbox("연도", list(range(today.year - 3, today.year + 2)), index=3, key="fy")
+        with c2:
+            fm = st.selectbox("월", list(range(1, 13)), index=today.month - 1, key="fm")
     fym = ym_from_year_month(fy, fm)
-    fday = st.selectbox("반영일(일)", list(range(1, 32)), index=0, key="fix_apply_day")
-    if st.button("선택 월에 반영", type="primary", disabled=rules.empty) and run_once("fixed_apply"):
+
+    if st.button("선택 월에 반영", type="primary", disabled=rules.empty):
         applied_rows = []
         ledger_rows = []
 
         for _, r in rules.iterrows():
             nm = str(r.get("name", "")).strip()
+            cat = str(r.get("category", "생활")).strip() or "생활"
             amt = int(r.get("amount", 0))
             mm = str(r.get("memo", "")).strip()
 
@@ -638,9 +660,9 @@ with tabs[2]:
             ledger_rows.append({
                 "id": str(uuid.uuid4()),
                 "ym": fym,
-                "day": day_to_korean(int(fday)),
+                "day": "01일",
                 "type": "지출",
-                "category": "고정지출",
+                "category": cat,
                 "amount": amt,
                 "memo": f"[고정] {nm} {mm}".strip(),
                 "created_at": now_str(),
@@ -652,10 +674,10 @@ with tabs[2]:
         # fixed_applied에서 중복 걸러졌더라도, ledger가 dedup_key를 갖고 있으면 ledger에서도 중복이 걸러짐
         if wrote:
             safe_append_rows("ledger", ledger_rows, dedup_key_field="dedup_key")
-            read_df.clear()
+            st.cache_data.clear()
             st.success(f"{wrote}건 반영 완료 (중복 {skipped}건 제외)")
         else:
-            read_df.clear()
+            st.cache_data.clear()
             st.info(f"이미 해당 월에 동일 고정지출이 반영되어 있습니다. (중복 {skipped}건)")
 
     applied = read_df("fixed_applied")
@@ -688,7 +710,8 @@ def simple_inout_tab(sheet_key: str, title: str):
         amt_str = st.text_input("금액", value="", key=f"{sheet_key}_amt")
         memo = st.text_input("메모", value="", key=f"{sheet_key}_memo")
         ok = st.form_submit_button("저장", type="primary")
-    if ok and run_once(f"{sheet_key}_add"):
+
+    if ok:
         parsed = parse_yyyy_mm_dd(date_str)
         amt = to_int_amount(amt_str)
         if not parsed:
@@ -706,7 +729,7 @@ def simple_inout_tab(sheet_key: str, title: str):
                 "created_at": now_str(),
             }
             safe_append_rows(sheet_key, [row])
-            read_df.clear()
+            st.cache_data.clear()
             st.success("저장 완료")
 
     df = read_df(sheet_key)
@@ -720,10 +743,15 @@ def simple_inout_tab(sheet_key: str, title: str):
     exp = int(df.loc[df["type"] == "지출", "amount"].sum())
     diff = inc - exp
 
-    c1, c2, c3 = st.columns(3)
-    c1.metric("전체 수입합계", fmt_amount(inc))
-    c2.metric("전체 지출합계", fmt_amount(exp))
-    c3.metric("차액", fmt_amount(diff))
+    if mobile_mode:
+        st.metric("전체 수입합계", fmt_amount(inc))
+        st.metric("전체 지출합계", fmt_amount(exp))
+        st.metric("차액", fmt_amount(diff))
+    else:
+        c1, c2, c3 = st.columns(3)
+        c1.metric("전체 수입합계", fmt_amount(inc))
+        c2.metric("전체 지출합계", fmt_amount(exp))
+        c3.metric("차액", fmt_amount(diff))
 
     st.markdown("#### 전체 내역")
     show = df[["day", "type", "amount", "memo"]].rename(columns={"day": "날짜", "type": "구분", "amount": "금액", "memo": "메모"})
@@ -753,7 +781,8 @@ with tabs[5]:
         card_name = st.text_input("카드명", placeholder="예: 현대카드 M")
         benefit = st.text_area("혜택 메모", height=80, placeholder="예: 대중교통 10% ...")
         ok = st.form_submit_button("저장", type="primary")
-    if ok and run_once("card_add"):
+
+    if ok:
         if not card_name.strip():
             st.error("카드명을 입력해 주세요.")
         else:
@@ -764,7 +793,7 @@ with tabs[5]:
                 "created_at": now_str(),
             }
             safe_append_rows("cards", [row])
-            read_df.clear()
+            st.cache_data.clear()
             st.success("저장 완료")
 
     cards = read_df("cards")
@@ -793,7 +822,8 @@ with tabs[5]:
             billing_day = st.selectbox("결제일(일)", list(range(1, 32)))
         memo = st.text_input("메모", placeholder="예: 프리미엄")
         ok2 = st.form_submit_button("정기결제 저장", type="primary", disabled=not bool(card_list))
-    if ok2 and run_once("sub_add"):
+
+    if ok2:
         amt = to_int_amount(amt_str)
         if not merchant.strip():
             st.error("가맹점/서비스명을 입력해 주세요.")
@@ -810,7 +840,7 @@ with tabs[5]:
                 "created_at": now_str(),
             }
             safe_append_rows("subscriptions", [row])
-            read_df.clear()
+            st.cache_data.clear()
             st.success("저장 완료")
 
     subs = read_df("subscriptions")
