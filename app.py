@@ -52,12 +52,11 @@ st.markdown(
     """
 <style>
 /* ---------------------------
-   Dark background + White inputs + Simple cards
+   Dark background + White inputs
    --------------------------- */
 :root{
   --bg:#0e1117;
   --panel:#111827;
-  --panel2:#0b1220;
   --text:#f3f4f6;
   --muted:#9ca3af;
   --border:#2a2f3a;
@@ -71,13 +70,14 @@ html, body, [data-testid="stAppViewContainer"], [data-testid="stHeader"]{
 
 /* Main container */
 .block-container{
-  padding-top: 0.7rem;
+  padding-top: 0.8rem;
   padding-bottom: 3.0rem;
-  max-width: 980px;
+  max-width: 860px;
 }
 
 /* Typography */
 h1, h2, h3, h4, h5, h6 { color: var(--text) !important; }
+p, label, span, small, div { color: inherit; }
 [data-testid="stMarkdownContainer"] p { color: var(--muted) !important; }
 
 /* Sticky tabs (dark) */
@@ -87,35 +87,24 @@ div[data-testid="stTabs"]{
   z-index: 999;
   background: var(--bg);
   padding-top: 0.2rem;
-  padding-bottom: 0.2rem;
-  border-bottom: 1px solid rgba(255,255,255,0.06);
+  border-bottom: 1px solid var(--border);
 }
 div[data-testid="stTabs"] button{
   padding: 10px 12px;
-  color: var(--muted) !important;
-}
-div[data-testid="stTabs"] button[aria-selected="true"]{
   color: var(--text) !important;
 }
 
 /* Tabs scroll on mobile */
 div[data-testid="stTabs"] [data-baseweb="tab-list"]{
-  overflow-x: auto !important;
-  flex-wrap: nowrap !important;
-  -webkit-overflow-scrolling: touch !important;
+  overflow-x:auto !important;
+  flex-wrap:nowrap !important;
+  -webkit-overflow-scrolling:touch !important;
 }
 
-/* ✅ Make Streamlit columns stack on phones (simple & pretty) */
-@media (max-width: 480px){
-  div[data-testid="stHorizontalBlock"]{
-    flex-direction: column !important;
-    gap: 0.75rem !important;
-  }
-}
+/* iOS zoom 방지 */
+button, input, textarea { font-size: 16px !important; }
 
-/* Inputs: white */
-button, input, textarea {font-size: 16px !important;} /* iOS zoom 방지 */
-
+/* White input surfaces */
 input, textarea{
   background:#ffffff !important;
   color:#111827 !important;
@@ -124,9 +113,9 @@ input, textarea{
 }
 [data-baseweb="select"] > div{
   background:#ffffff !important;
+  color:#111827 !important;
   border:1px solid #e5e7eb !important;
   border-radius:12px !important;
-  color:#111827 !important;
 }
 [data-baseweb="input"] > div{
   background:#ffffff !important;
@@ -142,35 +131,15 @@ input, textarea{
   border:1px solid #e5e7eb !important;
 }
 
-/* Metric cards */
-div[data-testid="metric-container"]{
-  background: var(--panel) !important;
-  border: 1px solid rgba(255,255,255,0.08) !important;
-  border-radius: 16px !important;
-  padding: 12px 12px !important;
-}
-div[data-testid="metric-container"] *{ color: var(--text) !important; }
-div[data-testid="metric-container"] [data-testid="stMetricLabel"]{
-  color: var(--muted) !important;
-}
-div[data-testid="metric-container"] [data-testid="stMetricValue"]{
-  font-weight: 800 !important;
-}
-
-/* Dataframe/table as white card for readability */
-[data-testid="stDataFrame"], [data-testid="stTable"]{
-  background:#ffffff !important;
-  border-radius:14px !important;
-  overflow:hidden !important;
-  border:1px solid #e5e7eb !important;
-}
-[data-testid="stDataFrame"] * , [data-testid="stTable"] *{
-  color:#111827 !important;
-}
-
 /* Buttons */
 .stButton>button{
   border-radius:14px !important;
+}
+
+/* Dataframe header readability */
+[data-testid="stDataFrame"]{
+  border-radius:14px;
+  overflow:hidden;
 }
 
 /* Mobile full width */
@@ -179,9 +148,9 @@ div[data-testid="metric-container"] [data-testid="stMetricValue"]{
     max-width: 100% !important;
     padding-left: 0.8rem !important;
     padding-right: 0.8rem !important;
-    padding-top: 0.5rem !important;
+    padding-top: 0.6rem !important;
   }
-  h1{ font-size:1.9rem !important; line-height:1.05 !important; }
+  h1{ font-size:2.0rem !important; line-height:1.05 !important; }
 }
 </style>
 """,
