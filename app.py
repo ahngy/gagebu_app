@@ -417,7 +417,10 @@ with tabs[0]:
 
     # ---- 월 내역(지출) ----
     st.markdown("#### 지출내역")
+    show_fixed = st.checkbox("고정지출 포함", value=True)
     exp_rows = this_month[this_month["type"] == "지출"].copy()
+    if not show_fixed and not exp_rows.empty:
+        exp_rows = exp_rows[exp_rows["category"].astype(str) != "고정지출"].copy()
     if exp_rows.empty:
         st.info("선택한 월의 지출 내역이 없습니다.")
     else:
@@ -609,6 +612,7 @@ with tabs[2]:
     with c2:
         fm = st.selectbox("월", list(range(1, 13)), index=today.month - 1, key="fm")
     fym = ym_from_year_month(fy, fm)
+    fday = st.selectbox("반영일(일)", list(range(1, 32)), index=0, key="fix_apply_day")
     if st.button("선택 월에 반영", type="primary", disabled=rules.empty) and run_once("fixed_apply"):
         applied_rows = []
         ledger_rows = []
@@ -634,7 +638,7 @@ with tabs[2]:
             ledger_rows.append({
                 "id": str(uuid.uuid4()),
                 "ym": fym,
-                "day": "01일",
+                "day": day_to_korean(int(fday)),
                 "type": "지출",
                 "category": "고정지출",
                 "amount": amt,
