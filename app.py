@@ -268,6 +268,10 @@ def delete_row_by_id(key: str, row_id: str):
 # -----------------------------
 st.title("📒 가계부 웹앱")
 
+# Mobile layout toggle (recommended for iPhone / PWA)
+mobile_mode = st.toggle("📱 모바일 모드", value=True, help="iPhone/홈화면 모드에서 레이아웃을 안정적으로 표시합니다.")
+
+
 tabs = st.tabs(TAB_NAMES)
 today = datetime.now()
 
