@@ -333,7 +333,6 @@ with tabs[0]:
                 "ym": row_ym,
                 "day": row_day,
                 "type": entry_type,
-                "category": category,
                 "amount": amt,
                 "memo": memo.strip(),
                 "created_at": now_str(),
@@ -527,7 +526,7 @@ with tabs[1]:
             row = {
                 "id": str(uuid.uuid4()),
                 "ym": bym,
-                "category": cat,
+                "category": "고정지출",
                 "target": t,
                 "created_at": now_str(),
                 "dedup_key": dk,
@@ -559,12 +558,11 @@ with tabs[1]:
 # =============================
 with tabs[2]:
     st.subheader("고정지출")
-    st.caption("규칙 등록 → 월 선택 반영 (중복 방지: 동일 월/항목/금액 1회)")
+    st.caption("규칙 등록 → 월 선택 반영 (중복 방지: 동일 월/항목/금액 1회). 고정지출은 예산현황 표에 포함되지 않습니다.")
 
     st.markdown("#### 1) 고정지출 규칙 등록")
     with st.form("fixed_rule_form", clear_on_submit=True):
         name = st.text_input("항목명", placeholder="예: 통신비")
-        category = st.selectbox("카테고리", EXPENSE_CATS, index=2)  # 기본 생활
         amount_str = st.text_input("금액", placeholder="예: 55,000")
         memo = st.text_input("메모", placeholder="예: KT / 매달")
         ok = st.form_submit_button("규칙 저장", type="primary")
@@ -578,7 +576,6 @@ with tabs[2]:
             row = {
                 "id": str(uuid.uuid4()),
                 "name": name.strip(),
-                "category": category,
                 "amount": amt,
                 "memo": memo.strip(),
                 "created_at": now_str(),
@@ -588,7 +585,8 @@ with tabs[2]:
             st.success("규칙 저장 완료")
 
     rules = read_df("fixed_rules")
-    rules = ensure_cols(rules, ["id", "name", "category", "amount", "memo"])
+    # 고정지출은 카테고리 없이 관리(예산현황과 무관)
+    rules = ensure_cols(rules, ["id", "name", "amount", "memo"])
     if not rules.empty:
         rules["amount"] = pd.to_numeric(rules["amount"], errors="coerce").fillna(0).astype(int)
 
@@ -596,7 +594,7 @@ with tabs[2]:
     if rules.empty:
         st.info("등록된 규칙이 없습니다.")
     else:
-        v = rules[["name", "category", "amount", "memo"]].rename(columns={"name": "항목", "category": "카테고리", "amount": "금액", "memo": "메모"})
+        v = rules[["name", "amount", "memo"]].rename(columns={"name": "항목", "amount": "금액", "memo": "메모"})
         st.dataframe(
             v.style.format({"금액": lambda x: fmt_amount(int(x))})
             .set_properties(subset=["금액"], **{"text-align": "right"}),
@@ -617,7 +615,6 @@ with tabs[2]:
 
         for _, r in rules.iterrows():
             nm = str(r.get("name", "")).strip()
-            cat = str(r.get("category", "생활")).strip() or "생활"
             amt = int(r.get("amount", 0))
             mm = str(r.get("memo", "")).strip()
 
@@ -639,7 +636,7 @@ with tabs[2]:
                 "ym": fym,
                 "day": "01일",
                 "type": "지출",
-                "category": cat,
+                "category": "고정지출",
                 "amount": amt,
                 "memo": f"[고정] {nm} {mm}".strip(),
                 "created_at": now_str(),
