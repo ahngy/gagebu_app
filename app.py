@@ -1,6 +1,8 @@
 import re
 import uuid
 from datetime import datetime
+import time
+import random
 
 import pandas as pd
 import streamlit as st
@@ -35,48 +37,12 @@ SHEET_NAMES = {
 st.markdown(
     """
 <style>
-/* ✅ iPhone/PWA + 다크모드 꼬임 방지: 라이트 테마 변수 강제 */
-:root {
-  color-scheme: light !important;
-  --background-color: #ffffff !important;
-  --secondary-background-color: #ffffff !important;
-  --text-color: #111111 !important;
-  --secondary-text-color: #555555 !important;
-}
-
-/* 기본 레이아웃 */
-.block-container {padding-top: 0.8rem; padding-bottom: 3.0rem; max-width: 860px;}
+.block-container {padding-top: 1.0rem; padding-bottom: 3.0rem; max-width: 860px;}
 button, input, textarea {font-size: 16px !important;} /* iOS zoom 방지 */
-
-/* Sticky Tabs */
-div[data-testid="stTabs"] {position: sticky; top: 0; z-index: 999; background: #ffffff; padding-top: 0.2rem;}
+div[data-testid="stTabs"] {position: sticky; top: 0; z-index: 999; background: white; padding-top: 0.2rem;}
 div[data-testid="stTabs"] button {padding: 10px 12px;}
-
-/* 배경/글자색 강제 */
-html, body, [data-testid="stApp"], [data-testid="stAppViewContainer"], [data-testid="stHeader"]{
-  background: #ffffff !important;
-  color: var(--text-color) !important;
-}
-h1, h2, h3, p, label, span, div[data-testid="stMarkdownContainer"]{
-  color: var(--text-color) !important;
-}
-
-/* ✅ 모바일에서 탭이 잘리지 않게 가로 스크롤 */
-@media (max-width: 480px) {
-  .block-container { padding-left: 0.8rem !important; padding-right: 0.8rem !important; }
-  h1 { font-size: 2.0rem !important; line-height: 1.1 !important; margin-bottom: 0.3rem !important; }
-  h2 { font-size: 1.3rem !important; margin-top: 0.8rem !important; }
-  div[data-testid="stTabs"] [data-baseweb="tab-list"]{
-    overflow-x: auto !important;
-    flex-wrap: nowrap !important;
-    -webkit-overflow-scrolling: touch !important;
-  }
-  div[data-testid="stTabs"] button { padding: 8px 10px !important; }
-}
 </style>
 """,
-    unsafe_allow_html=True,
-),
     unsafe_allow_html=True,
 )
 
@@ -85,6 +51,19 @@ h1, h2, h3, p, label, span, div[data-testid="stMarkdownContainer"]{
 # -----------------------------
 def now_str() -> str:
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+
+def with_retry(fn, *, tries: int = 5, base_sleep: float = 0.6):
+    """Retry wrapper for Google Sheets calls (handles 429/5xx bursts)."""
+    last = None
+    for i in range(tries):
+        try:
+            return fn()
+        except Exception as e:
+            last = e
+            # exponential backoff + jitter
+            time.sleep(base_sleep * (2 ** i) + random.uniform(0, 0.2))
+    raise last
 
 def ym_from_year_month(year: int, month: int) -> str:
     return f"{year:04d}-{month:02d}"
@@ -167,13 +146,14 @@ def gs_client():
 def gs_book():
     return gs_client().open_by_url(st.secrets["GSHEET_URL"])
 
+@st.cache_resource
 def ws(key: str):
-    return gs_book().worksheet(SHEET_NAMES[key])
+    return with_retry(lambda: gs_book().worksheet(SHEET_NAMES[key]))
 
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=600)
 def read_df(key: str) -> pd.DataFrame:
     w = ws(key)
-    rows = w.get_all_records()
+    rows = with_retry(lambda: w.get_all_records())
     return pd.DataFrame(rows)
 
 def get_headers(key: str) -> list[str]:
