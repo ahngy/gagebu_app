@@ -6,6 +6,7 @@ import random
 
 import pandas as pd
 import streamlit as st
+import streamlit.components.v1 as components
 
 import gspread
 from google.oauth2.service_account import Credentials
@@ -14,6 +15,37 @@ from google.oauth2.service_account import Credentials
 # Config
 # -----------------------------
 st.set_page_config(page_title="가계부", layout="centered", initial_sidebar_state="collapsed")
+
+
+# -----------------------------
+# iOS PWA viewport fix (홈화면에 추가 시 레이아웃/스케일 깨짐 방지)
+# -----------------------------
+components.html(
+    """
+<script>
+(function(){
+  // Ensure viewport meta for iOS PWA
+  const head = document.getElementsByTagName('head')[0];
+  if (!head) return;
+
+  function upsertMeta(name, content){
+    let m = document.querySelector('meta[name="' + name + '"]');
+    if (!m){
+      m = document.createElement('meta');
+      m.setAttribute('name', name);
+      head.appendChild(m);
+    }
+    m.setAttribute('content', content);
+  }
+
+  upsertMeta('viewport', 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover');
+  upsertMeta('theme-color', '#ffffff');
+})();
+</script>
+""",
+    height=0,
+)
+
 
 INCOME_CATS = ["월급", "부수입", "이자", "캐시백", "기타"]
 EXPENSE_CATS = ["식재료", "외식/배달", "생활", "육아", "여가", "교통/유류", "의료", "기타"]
@@ -37,10 +69,38 @@ SHEET_NAMES = {
 st.markdown(
     """
 <style>
-.block-container {padding-top: 1.0rem; padding-bottom: 3.0rem; max-width: 860px;}
+/* 기본 레이아웃 */
 button, input, textarea {font-size: 16px !important;} /* iOS zoom 방지 */
-div[data-testid="stTabs"] {position: sticky; top: 0; z-index: 999; background: white; padding-top: 0.2rem;}
+
+/* 컨테이너: 데스크톱은 적당히, 모바일은 전체폭 */
+.block-container {padding-top: 1.0rem; padding-bottom: 3.0rem; max-width: 860px;}
+@media (max-width: 480px) {
+  .block-container{
+    max-width: 100% !important;
+    padding-left: 0.8rem !important;
+    padding-right: 0.8rem !important;
+    padding-top: 0.6rem !important;
+  }
+  h1 {font-size: 2.0rem !important; line-height: 1.1 !important; margin-bottom: 0.3rem !important;}
+  h2, h3 {margin-top: 0.8rem !important;}
+}
+
+/* Sticky Tabs */
+div[data-testid="stTabs"] {position: sticky; top: 0; z-index: 999; background: #ffffff; padding-top: 0.2rem;}
 div[data-testid="stTabs"] button {padding: 10px 12px;}
+
+/* 탭이 잘리지 않게 가로 스크롤 */
+div[data-testid="stTabs"] [data-baseweb="tab-list"]{
+  overflow-x: auto !important;
+  flex-wrap: nowrap !important;
+  -webkit-overflow-scrolling: touch !important;
+}
+
+/* iOS/PWA 다크모드 꼬임 방지: 배경/텍스트 대비 보정 */
+html, body, [data-testid="stAppViewContainer"], [data-testid="stHeader"], [data-testid="stApp"] {
+  background: #ffffff !important;
+  color: #111111 !important;
+}
 </style>
 """,
     unsafe_allow_html=True,
