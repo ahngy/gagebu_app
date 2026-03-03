@@ -120,7 +120,7 @@ def fmt_amount(n: int) -> str:
 
 def to_int_amount(s: str):
     s = str(s).strip().replace(",", "")
-    if not re.fullmatch(r"-?\\d+", s):
+    if not re.fullmatch(r"-?\d+", s):
         return None
     try:
         return int(s)
