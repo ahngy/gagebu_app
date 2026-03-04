@@ -120,7 +120,6 @@ SHEET_NAMES = {
 
 # =============================
 
-
 def apply_fixed_to_month(ym: str):
     """Apply fixed_rules into fixed_applied and ledger for a given ym.
     Prevents duplicates using dedup_key.
@@ -180,12 +179,10 @@ def apply_fixed_to_month(ym: str):
 
     return True, f"{ym} 고정지출 반영 완료 ({created}건)"
 
-
 # Helpers
 # =============================
 def now_str() -> str:
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
 
 def append_row(sheet_key: str, data: dict):
     """Append a row to a sheet using header order. Auto-fills id/created_at if columns exist."""
@@ -211,8 +208,6 @@ def day_k(d: int) -> str:
 
 def fmt_amount(n: int) -> str:
     return f"{int(n):,}"
-
-
 
 def metrics_row(income_sum: int, expense_sum: int, shown_balance: int):
     """Render 3 metrics in a single horizontal row (works reliably on iPhone PWA)."""
@@ -256,7 +251,6 @@ def metrics_row3(t1: str, v1: int, t2: str, v2: int, t3: str, v3: int):
 """,
         unsafe_allow_html=True,
     )
-
 
 def to_int_amount(s: str):
     s = str(s).strip().replace(",", "")
@@ -377,49 +371,6 @@ def safe_append_rows(sheet_key: str, rows: list[dict], dedup_key_field: str | No
     with_retry(lambda: w.append_rows(to_write, value_input_option="USER_ENTERED"))
     return len(to_write), skipped
 
-def find_row_by_id(sheet_key: str, row_id: str):
-    h = headers(sheet_key)
-    if "id" not in h:
-        return None
-    idx = h.index("id") + 1
-    a1 = col_to_a1(idx)
-    w = ws(sheet_key)
-    vals = with_retry(lambda: w.get(f"{a1}2:{a1}"))
-    ids = [r[0] for r in vals if r]
-    try:
-        pos0 = ids.index(row_id)
-        return 2 + pos0
-    except ValueError:
-        return None
-
-def update_row_by_id(sheet_key: str, row_id: str, updates: dict):
-    w = ws(sheet_key)
-    h = headers(sheet_key)
-    r = find_row_by_id(sheet_key, row_id)
-    if r is None:
-        return False, "해당 ID 행을 찾지 못했습니다."
-
-    cell_objs = []
-    for k, v in updates.items():
-        if k not in h:
-            continue
-        c = h.index(k) + 1
-        cell_objs.append(gspread.Cell(r, c, v))
-
-    if not cell_objs:
-        return False, "업데이트할 컬럼이 없습니다(헤더 확인)."
-
-    with_retry(lambda: w.update_cells(cell_objs, value_input_option="USER_ENTERED"))
-    return True, "수정 완료"
-
-def delete_row_by_id(sheet_key: str, row_id: str):
-    w = ws(sheet_key)
-    r = find_row_by_id(sheet_key, row_id)
-    if r is None:
-        return False, "해당 ID 행을 찾지 못했습니다."
-    with_retry(lambda: w.delete_rows(r))
-    return True, "삭제 완료"
-
 # =============================
 # Common UI
 # =============================
@@ -446,15 +397,6 @@ def month_picker(prefix: str):
         with c2:
             m = st.selectbox("월", months, index=today.month - 1, key=f"{prefix}_m")
     return y, m, ym_from(y, m)
-
-def record_selector(df: pd.DataFrame, label_col: str, key: str):
-    if df.empty:
-        return None, None
-    labels = df[label_col].tolist()
-    ids = df["id"].astype(str).tolist()
-    mapping = dict(zip(labels, ids))
-    sel = st.selectbox("수정할 내역 선택", labels, key=key)
-    return sel, mapping[sel]
 
 # =============================
 # Tab 1: Ledger
@@ -551,51 +493,35 @@ with tabs[0]:
 
     st.markdown("#### 전체내역")
 
-
     if this_month.empty:
-
 
         st.info("선택한 월에 내역이 없습니다.")
 
-
     else:
-
 
         view = this_month.copy()
 
-
         view["amount"] = pd.to_numeric(view["amount"], errors="coerce").fillna(0).astype(int)
-
 
         # 수입/지출 모두 표시, created_at(등록시각)은 표시하지 않음
 
-
         show = view[["day","type","category","amount","memo"]].rename(
-
 
             columns={"day":"날짜","type":"구분","category":"카테고리","amount":"금액","memo":"메모"}
 
-
         )
-
 
         st.dataframe(
 
-
             show.style.format({"금액": lambda x: fmt_amount(int(x))})
-
 
                 .set_properties(subset=["금액"], **{"text-align":"right"}),
 
-
             use_container_width=True,
-
 
             hide_index=True,
 
-
         )
-
 
 # =============================
 # Tab 2: Budgets
@@ -653,7 +579,6 @@ with tabs[2]:
         else:
             st.error(msg)
 
-
     st.markdown("#### 내역")
     with st.form("fixed_rule_add", clear_on_submit=True):
         name = st.text_input("항목명", placeholder="예: 통신비")
@@ -683,7 +608,6 @@ with tabs[2]:
     else:
         view = rules[["name","amount","memo"]].rename(columns={"name":"항목","amount":"금액","memo":"메모"})
         st.dataframe(view.style.format({"금액": lambda x: fmt_amount(int(x))}).set_properties(subset=["금액"], **{"text-align":"right"}), use_container_width=True, hide_index=True)
-
 
 # =============================
 # Tabs 4-5: Events / Zeropay (edit/delete)
@@ -731,7 +655,6 @@ def inout_tab(sheet_key: str, title: str):
         hide_index=True,
     )
 
-
 # =============================
 # Tab 4: Events
 # =============================
@@ -773,8 +696,6 @@ with tabs[5]:
         st.markdown("##### 카드 목록")
         view = cards[["card_name","benefit_memo"]].rename(columns={"card_name":"카드명","benefit_memo":"혜택 메모"})
         st.dataframe(view, use_container_width=True, hide_index=True)
-
-
 
         subs = ensure_cols(read_df("subscriptions"), ["id","card_name","merchant","amount","billing_day","memo","created_at"])
         if not subs.empty:
