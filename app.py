@@ -119,6 +119,68 @@ SHEET_NAMES = {
 }
 
 # =============================
+
+
+def apply_fixed_to_month(ym: str):
+    """Apply fixed_rules into fixed_applied and ledger for a given ym.
+    Prevents duplicates using dedup_key.
+    """
+    rules = ensure_cols(read_df("fixed_rules"), ["id","name","amount","memo","created_at"])
+    if rules.empty:
+        return False, "고정지출 규칙이 없습니다."
+    applied = ensure_cols(read_df("fixed_applied"), ["id","ym","day","name","amount","memo","created_at","dedup_key"])
+    ledger = ensure_cols(read_df("ledger"), ["id","ym","day","type","category","amount","memo","created_at","dedup_key"])
+    # normalize
+    rules["amount"] = pd.to_numeric(rules["amount"], errors="coerce").fillna(0).astype(int)
+    if not applied.empty:
+        existing_applied = set(applied["dedup_key"].astype(str).tolist())
+    else:
+        existing_applied = set()
+    if not ledger.empty:
+        existing_ledger = set(ledger["dedup_key"].astype(str).tolist())
+    else:
+        existing_ledger = set()
+
+    created = 0
+    for _, r in rules.iterrows():
+        name = str(r.get("name","")).strip()
+        amt = int(r.get("amount",0))
+        memo = str(r.get("memo","")).strip()
+        day = "01일"
+        dk_applied = f"FIX_APPLIED|{ym}|{day}|{name}|{amt}"
+        dk_ledger = f"FIX_LEDGER|{ym}|{day}|{name}|{amt}"
+        if dk_applied not in existing_applied:
+            append_row(
+                "fixed_applied",
+                {
+                    "ym": ym,
+                    "day": day,
+                    "name": name,
+                    "amount": amt,
+                    "memo": memo,
+                    "dedup_key": dk_applied,
+                },
+            )
+            existing_applied.add(dk_applied)
+        if dk_ledger not in existing_ledger:
+            append_row(
+                "ledger",
+                {
+                    "ym": ym,
+                    "day": day,
+                    "type": "지출",
+                    "category": "고정지출",
+                    "amount": amt,
+                    "memo": f"[고정] {name} {memo}".strip(),
+                    "dedup_key": dk_ledger,
+                },
+            )
+            existing_ledger.add(dk_ledger)
+            created += 1
+
+    return True, f"{ym} 고정지출 반영 완료 ({created}건)"
+
+
 # Helpers
 # =============================
 def now_str() -> str:
@@ -599,65 +661,6 @@ with tabs[2]:
         view = rules[["name","amount","memo"]].rename(columns={"name":"항목","amount":"금액","memo":"메모"})
         st.dataframe(view.style.format({"금액": lambda x: fmt_amount(int(x))}).set_properties(subset=["금액"], **{"text-align":"right"}), use_container_width=True, hide_index=True)
 
-
-def apply_fixed_to_month(ym: str):
-    """Apply fixed_rules into fixed_applied and ledger for a given ym.
-    Prevents duplicates using dedup_key.
-    """
-    rules = ensure_cols(read_df("fixed_rules"), ["id","name","amount","memo","created_at"])
-    if rules.empty:
-        return False, "고정지출 규칙이 없습니다."
-    applied = ensure_cols(read_df("fixed_applied"), ["id","ym","day","name","amount","memo","created_at","dedup_key"])
-    ledger = ensure_cols(read_df("ledger"), ["id","ym","day","type","category","amount","memo","created_at","dedup_key"])
-    # normalize
-    rules["amount"] = pd.to_numeric(rules["amount"], errors="coerce").fillna(0).astype(int)
-    if not applied.empty:
-        existing_applied = set(applied["dedup_key"].astype(str).tolist())
-    else:
-        existing_applied = set()
-    if not ledger.empty:
-        existing_ledger = set(ledger["dedup_key"].astype(str).tolist())
-    else:
-        existing_ledger = set()
-
-    created = 0
-    for _, r in rules.iterrows():
-        name = str(r.get("name","")).strip()
-        amt = int(r.get("amount",0))
-        memo = str(r.get("memo","")).strip()
-        day = "01일"
-        dk_applied = f"FIX_APPLIED|{ym}|{day}|{name}|{amt}"
-        dk_ledger = f"FIX_LEDGER|{ym}|{day}|{name}|{amt}"
-        if dk_applied not in existing_applied:
-            append_row(
-                "fixed_applied",
-                {
-                    "ym": ym,
-                    "day": day,
-                    "name": name,
-                    "amount": amt,
-                    "memo": memo,
-                    "dedup_key": dk_applied,
-                },
-            )
-            existing_applied.add(dk_applied)
-        if dk_ledger not in existing_ledger:
-            append_row(
-                "ledger",
-                {
-                    "ym": ym,
-                    "day": day,
-                    "type": "지출",
-                    "category": "고정지출",
-                    "amount": amt,
-                    "memo": f"[고정] {name} {memo}".strip(),
-                    "dedup_key": dk_ledger,
-                },
-            )
-            existing_ledger.add(dk_ledger)
-            created += 1
-
-    return True, f"{ym} 고정지출 반영 완료 ({created}건)"
 
 # =============================
 # Tabs 4-5: Events / Zeropay (edit/delete)
