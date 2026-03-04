@@ -763,69 +763,42 @@ with tabs[2]:
         view = rules[["name","amount","memo"]].rename(columns={"name":"항목","amount":"금액","memo":"메모"})
         st.dataframe(view.style.format({"금액": lambda x: fmt_amount(int(x))}).set_properties(subset=["금액"], **{"text-align":"right"}), use_container_width=True, hide_index=True)
 
-    
     st.markdown("#### 표에서 바로 수정/삭제")
-    inline = df.copy()
-    inline["amount"] = pd.to_numeric(inline["amount"], errors="coerce").fillna(0).astype(int)
-    edited = _make_editor(
-        inline.rename(columns={"day":"날짜","type":"구분","amount":"금액","memo":"메모"}),
-        cols_show=["날짜","구분","금액","메모"],
-        cols_edit=["날짜","구분","금액","메모"],
-        key=f"{sheet_key}_inline_editor",
-    )
-    if st.button("✅ 변경사항 저장/삭제 반영", type="primary", key=f"{sheet_key}_inline_apply"):
-        orig = inline.set_index("id")
-        for i, row in edited.iterrows():
-            rid = str(inline.iloc[i]["id"])
-            if bool(row.get("삭제", False)):
-                delete_row_by_id(sheet_key, rid)
-                continue
-            day = str(row.get("날짜","")).strip()
-            if not re.fullmatch(r"\\d{2}일", day):
-                st.error(f"날짜 형식 오류: {day} (예: 05일)")
-                st.stop()
-            typ = str(row.get("구분","")).strip()
-            if typ not in ["수입","지출"]:
-                st.error(f"구분 오류: {typ}")
-                st.stop()
-            amt = to_int_amount(row.get("금액",""))
-            if amt is None:
-                try: amt = int(row.get("금액"))
-                except:
-                    st.error(f"금액 오류: {row.get('금액')}")
+    if rules.empty:
+        st.info("수정/삭제할 항목이 없습니다.")
+    else:
+        r_inline = rules.copy()
+        r_inline["amount"] = pd.to_numeric(r_inline["amount"], errors="coerce").fillna(0).astype(int)
+        edited = _make_editor(
+            r_inline.rename(columns={"name":"항목","amount":"금액","memo":"메모"}),
+            cols_show=["항목","금액","메모"],
+            cols_edit=["항목","금액","메모"],
+            key="fixed_rule_inline_editor",
+        )
+        if st.button("✅ 변경사항 저장/삭제 반영", type="primary", key="fixed_rule_inline_apply"):
+            orig = r_inline.set_index("id")
+            for i, row in edited.iterrows():
+                rid = str(r_inline.iloc[i]["id"])
+                if bool(row.get("삭제", False)):
+                    delete_row_by_id("fixed_rules", rid)
+                    continue
+                name = str(row.get("항목","")).strip()
+                if not name:
+                    st.error("항목명은 비울 수 없습니다.")
                     st.stop()
-            memo = str(row.get("메모","")).strip()
-            o = orig.loc[rid]
-            if str(o.get("day","")) != day or str(o.get("type","")) != typ or int(o.get("amount",0)) != int(amt) or str(o.get("memo","")) != memo:
-                update_row_by_id(sheet_key, rid, {"day": day, "type": typ, "amount": int(amt), "memo": memo})
-        read_df.clear()
-        st.success("반영 완료")
-
-    st.markdown("#### 수정/삭제")
-        r2 = rules.copy()
-        r2["label"] = r2.apply(lambda r: f"{r['name']} | {fmt_amount(int(r['amount']))}", axis=1)
-        _, sel_id = record_selector(r2, "label", "fixed_rule_pick")
-        row = r2[r2["id"].astype(str)==str(sel_id)].iloc[0]
-        with st.form("fixed_rule_edit"):
-            new_name = st.text_input("항목명", value=str(row["name"]))
-            new_amt = st.text_input("금액", value=fmt_amount(int(row["amount"])))
-            new_memo = st.text_input("메모", value=str(row.get("memo","")))
-            do_u = st.form_submit_button("수정", type="primary")
-            do_d = st.form_submit_button("삭제", type="secondary")
-        if do_u and run_once("fixed_rule_update_once"):
-            amt = to_int_amount(new_amt)
-            if not new_name.strip():
-                st.error("항목명을 입력해 주세요.")
-            elif amt is None or amt <= 0:
-                st.error("금액은 1 이상으로 입력해 주세요.")
-            else:
-                ok2, msg = update_row_by_id("fixed_rules", sel_id, {"name":new_name.strip(),"amount":amt,"memo":new_memo.strip()})
-                read_df.clear()
-                st.success(msg) if ok2 else st.error(msg)
-        if do_d and run_once("fixed_rule_delete_once"):
-            ok2, msg = delete_row_by_id("fixed_rules", sel_id)
+                amt = to_int_amount(row.get("금액",""))
+                if amt is None:
+                    try:
+                        amt = int(row.get("금액"))
+                    except:
+                        st.error(f"금액 오류: {row.get('금액')}")
+                        st.stop()
+                memo = str(row.get("메모","")).strip()
+                o = orig.loc[rid]
+                if str(o.get("name","")) != name or int(o.get("amount",0)) != int(amt) or str(o.get("memo","")) != memo:
+                    update_row_by_id("fixed_rules", rid, {"name": name, "amount": int(amt), "memo": memo})
             read_df.clear()
-            st.success(msg) if ok2 else st.error(msg)
+            st.success("반영 완료")
 
     st.markdown("---")
     st.markdown("#### 반영하기")
