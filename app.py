@@ -491,6 +491,12 @@ with tabs[0]:
             hide_index=True,
         )
 
+        # --- 예산 요약 (합계/지출/잔액) ---
+        budget_total = int(view["목표금액"].sum())
+        budget_spent = int(view["실제지출금액"].sum())
+        budget_balance = budget_total - budget_spent
+        metrics_row3("예산합계", budget_total, "예산지출합계", budget_spent, "잔액", budget_balance)
+
     st.markdown("#### 전체내역")
 
     if this_month.empty:
