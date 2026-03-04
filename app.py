@@ -80,6 +80,20 @@ input, textarea {background:#ffffff !important; color:#111827 !important; border
 [data-baseweb="datepicker"] > div {background:#ffffff !important; border-radius:10px !important;}
 
 .stButton>button {border-radius: 12px;}
+
+/* Metric row (force 3 cards in one line on iPhone) */
+.metric-row {display:flex; gap:10px; flex-wrap:nowrap; width:100%; align-items:stretch;}
+.metric-card {flex:1 1 0; min-width:0; background:#111827; border:1px solid rgba(255,255,255,0.08);
+  border-radius:14px; padding:12px 12px;}
+.metric-title {font-size:12px; color:#cbd5e1; margin:0 0 6px 0; line-height:1.1;}
+.metric-value {font-size:18px; color:#f3f4f6; font-weight:700; margin:0; text-align:right; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+@media (max-width:480px){
+  .metric-row{gap:8px;}
+  .metric-card{padding:10px;}
+  .metric-title{font-size:11px;}
+  .metric-value{font-size:16px;}
+}
+
 </style>
 """,
     unsafe_allow_html=True,
@@ -117,6 +131,52 @@ def day_k(d: int) -> str:
 
 def fmt_amount(n: int) -> str:
     return f"{int(n):,}"
+
+
+
+def metrics_row(income_sum: int, expense_sum: int, shown_balance: int):
+    """Render 3 metrics in a single horizontal row (works reliably on iPhone PWA)."""
+    st.markdown(
+        f"""
+<div class="metric-row">
+  <div class="metric-card">
+    <p class="metric-title">수입합계</p>
+    <p class="metric-value">{fmt_amount(income_sum)}</p>
+  </div>
+  <div class="metric-card">
+    <p class="metric-title">지출합계</p>
+    <p class="metric-value">{fmt_amount(expense_sum)}</p>
+  </div>
+  <div class="metric-card">
+    <p class="metric-title">잔액</p>
+    <p class="metric-value">{fmt_amount(shown_balance)}</p>
+  </div>
+</div>
+""",
+        unsafe_allow_html=True,
+    )
+
+def metrics_row3(t1: str, v1: int, t2: str, v2: int, t3: str, v3: int):
+    st.markdown(
+        f"""
+<div class="metric-row">
+  <div class="metric-card">
+    <p class="metric-title">{t1}</p>
+    <p class="metric-value">{fmt_amount(v1)}</p>
+  </div>
+  <div class="metric-card">
+    <p class="metric-title">{t2}</p>
+    <p class="metric-value">{fmt_amount(v2)}</p>
+  </div>
+  <div class="metric-card">
+    <p class="metric-title">{t3}</p>
+    <p class="metric-value">{fmt_amount(v3)}</p>
+  </div>
+</div>
+""",
+        unsafe_allow_html=True,
+    )
+
 
 def to_int_amount(s: str):
     s = str(s).strip().replace(",", "")
@@ -375,12 +435,7 @@ with tabs[0]:
 
     bmode = st.radio("잔액 보기", ["선택 월 기준", "당해년도 월 누적"], horizontal=True)
     shown_balance = balance_month if bmode == "선택 월 기준" else balance_ytd
-
-    c1, c2, c3 = st.columns(3)
-
-    c1.metric("수입합계", fmt_amount(income_sum))
-    c2.metric("지출합계", fmt_amount(expense_sum))
-    c3.metric("잔액", fmt_amount(shown_balance))
+    metrics_row(income_sum, expense_sum, shown_balance)
 
     st.markdown("#### 예산현황")
     budgets = ensure_cols(read_df("budgets"), ["id","ym","category","target","created_at","dedup_key"])
@@ -678,15 +733,7 @@ def inout_tab(sheet_key: str, title: str):
     exp = int(df.loc[df["type"]=="지출","amount"].sum())
     diff = inc - exp
 
-    if mobile_mode:
-        st.metric("전체 수입합계", fmt_amount(inc))
-        st.metric("전체 지출합계", fmt_amount(exp))
-        st.metric("차액", fmt_amount(diff))
-    else:
-        c1,c2,c3 = st.columns(3)
-        c1.metric("전체 수입합계", fmt_amount(inc))
-        c2.metric("전체 지출합계", fmt_amount(exp))
-        c3.metric("차액", fmt_amount(diff))
+    metrics_row3("전체 수입합계", inc, "전체 지출합계", exp, "차액", diff)
 
     st.markdown("#### 전체 내역")
     show = df[["day","type","amount","memo","created_at"]].rename(columns={"day":"날짜","type":"구분","amount":"금액","memo":"메모","created_at":"등록시각"})
