@@ -505,76 +505,6 @@ with tabs[0]:
             hide_index=True,
         )
 
-    if this_month.empty:
-        st.info("선택한 월에 수정/삭제할 내역이 없습니다.")
-    else:
-        edit_df = this_month.copy()
-        edit_df["amount"] = pd.to_numeric(edit_df["amount"], errors="coerce").fillna(0).astype(int)
-        # 표시/편집 컬럼 (ID는 숨김, 내부 업데이트에만 사용)
-        view_cols = ["day", "type", "category", "amount", "memo"]
-        edited = _make_editor(
-            edit_df.assign(day=edit_df["day"].astype(str), type=edit_df["type"].astype(str), category=edit_df["category"].astype(str)),
-            cols_show=view_cols,
-            cols_edit=["day", "type", "category", "amount", "memo"],
-            key="ledger_inline_editor",
-        )
-        if st.button("✅ 변경사항 저장/삭제 반영", type="primary", key="ledger_inline_apply"):
-            orig = edit_df.set_index("id")
-            # edited에는 id가 없으니, 같은 순서를 이용해서 매핑
-            for i, row in edited.iterrows():
-                rid = str(edit_df.iloc[i]["id"])
-                if rid not in orig.index:
-                    continue
-                if bool(row.get("삭제", False)):
-                    delete_row_by_id("ledger", rid)
-                    continue
-                # validate / normalize
-                day = str(row.get("day", "")).strip()
-                if not re.fullmatch(r"\\d{2}일", day):
-                    st.error(f"날짜 형식 오류: {day} (예: 05일)")
-                    st.stop()
-                typ = str(row.get("type", "")).strip()
-                if typ not in ["수입", "지출"]:
-                    st.error(f"구분 오류: {typ}")
-                    st.stop()
-                cat = str(row.get("category", "")).strip()
-                if typ == "수입" and cat not in INCOME_CATS:
-                    st.error(f"수입 카테고리 오류: {cat}")
-                    st.stop()
-                if typ == "지출" and cat not in (EXPENSE_CATS + ["고정지출"]):
-                    st.error(f"지출 카테고리 오류: {cat}")
-                    st.stop()
-
-                amt = to_int_amount(row.get("amount", ""))
-                if amt is None:
-                    # data_editor가 숫자로 넘기면 그대로 처리
-                    try:
-                        amt = int(row.get("amount"))
-                    except:
-                        st.error(f"금액 오류: {row.get('amount')}")
-                        st.stop()
-                memo = str(row.get("memo", "")).strip()
-
-                row_ym = ym  # 선택 월 고정 (이 표는 해당 월만 보여줌)
-                dk = f"LEDGER|{row_ym}|{day}|{typ}|{cat}|{amt}|{memo}"
-                # compare with original
-                o = orig.loc[rid]
-                changed = (
-                    str(o.get("day","")) != day
-                    or str(o.get("type","")) != typ
-                    or str(o.get("category","")) != cat
-                    or int(o.get("amount",0)) != int(amt)
-                    or str(o.get("memo","")) != memo
-                )
-                if changed:
-                    update_row_by_id(
-                        "ledger",
-                        rid,
-                        {"ym": row_ym, "day": day, "type": typ, "category": cat, "amount": int(amt), "memo": memo, "dedup_key": dk},
-                    )
-            read_df.clear()
-            st.success("반영 완료")
-
 # =============================
 # Tab 2: Budgets
 # =============================
@@ -687,58 +617,6 @@ with tabs[2]:
         a_inline = a.copy()
         a_inline["amount"] = pd.to_numeric(a_inline["amount"], errors="coerce").fillna(0).astype(int)
         # 함께 수정될 ledger 행은 dedup_key로 찾음
-        edited = _make_editor(
-            a_inline.rename(columns={"day":"날짜","name":"항목","amount":"금액","memo":"메모"}),
-            cols_show=["날짜","항목","금액","메모"],
-            cols_edit=["날짜","금액","메모"],
-            key="fixed_applied_inline_editor",
-        )
-        if st.button("✅ 변경사항 저장/삭제 반영", type="primary", key="fixed_applied_inline_apply"):
-            orig = a_inline.set_index("id")
-            for i, row in edited.iterrows():
-                rid = str(a_inline.iloc[i]["id"])
-                old = orig.loc[rid]
-                old_day = str(old.get("day",""))
-                old_name = str(old.get("name","")).strip()
-                old_amt = int(old.get("amount",0))
-                old_ym = str(old.get("ym",""))
-                # ledger counterpart key
-                old_ldk = f"FIX_LEDGER|{old_ym}|{old_day}|{old_name}|{old_amt}"
-                if bool(row.get("삭제", False)):
-                    delete_row_by_id("fixed_applied", rid)
-                    # delete ledger row if found
-                    lr = find_row_by_field("ledger", "dedup_key", old_ldk)
-                    if lr:
-                        delete_row_by_rownum("ledger", lr)
-                    continue
-
-                day = str(row.get("날짜","")).strip()
-                if not re.fullmatch(r"\\d{2}일", day):
-                    st.error(f"날짜 형식 오류: {day} (예: 05일)")
-                    st.stop()
-                amt = to_int_amount(row.get("금액",""))
-                if amt is None:
-                    try: amt = int(row.get("금액"))
-                    except:
-                        st.error(f"금액 오류: {row.get('금액')}")
-                        st.stop()
-                memo = str(row.get("메모","")).strip()
-
-                changed = (old_day != day) or (old_amt != int(amt)) or (str(old.get("memo","")) != memo)
-                if changed:
-                    new_dk = f"FIX_APPLIED|{old_ym}|{day}|{old_name}|{int(amt)}"
-                    update_row_by_id("fixed_applied", rid, {"day": day, "amount": int(amt), "memo": memo, "dedup_key": new_dk})
-                    # sync ledger
-                    lr = find_row_by_field("ledger", "dedup_key", old_ldk)
-                    if lr:
-                        new_ldk = f"FIX_LEDGER|{old_ym}|{day}|{old_name}|{int(amt)}"
-                        update_row_by_rownum(
-                            "ledger",
-                            lr,
-                            {"day": day, "amount": int(amt), "memo": f"[고정] {old_name} {memo}".strip(), "dedup_key": new_ldk},
-                        )
-            read_df.clear()
-            st.success("반영 완료")
 
 # =============================
 # Tabs 4-5: Events / Zeropay (edit/delete)
@@ -818,35 +696,24 @@ with tabs[5]:
 
         st.markdown("#### 카드별 정기결제 내역")
 
-
         if subs.empty:
-
 
             st.info("정기결제 내역이 없습니다.")
 
-
         else:
-
 
             sel = st.selectbox("카드 선택", sorted(subs["card_name"].astype(str).unique().tolist()), key="sub_card_pick")
 
-
             sub_view = subs[subs["card_name"].astype(str) == sel].copy()
-
 
             show = sub_view[["merchant","amount","billing_day","memo"]].rename(columns={"merchant":"가맹점/서비스","amount":"금액","billing_day":"결제일","memo":"메모"})
 
-
             st.dataframe(
-
 
                 show.style.format({"금액": lambda x: fmt_amount(int(x))}).set_properties(subset=["금액"], **{"text-align":"right"}),
 
-
                 use_container_width=True,
 
-
                 hide_index=True,
-
 
             )
