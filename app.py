@@ -171,7 +171,7 @@ def apply_fixed_to_month(ym: str):
                     "type": "지출",
                     "category": "고정지출",
                     "amount": amt,
-                    "memo": f"{name} {memo}".strip(),
+                    "memo": f"[고정] {name} {memo}".strip(),
                     "dedup_key": dk_ledger,
                 },
             )
@@ -498,7 +498,14 @@ with tabs[0]:
             }
             wrote, _ = safe_append_rows("ledger", [row], dedup_key_field="dedup_key")
             read_df.clear()
-            st.success("저장 완료") if wrote else st.info("동일 내용이 이미 있어 추가하지 않았습니다.")
+            if wrote:
+
+                st.success(
+            )
+
+            else:
+
+                st.info("저장 완료")
 
     ledger = ensure_cols(read_df("ledger"), ["id","ym","day","type","category","amount","memo","created_at","dedup_key"])
     if not ledger.empty:
@@ -616,7 +623,14 @@ with tabs[1]:
             row = {"id":str(uuid.uuid4()),"ym":bym,"category":cat,"target":t,"created_at":now_str(),"dedup_key":dk}
             wrote, _ = safe_append_rows("budgets", [row], dedup_key_field="dedup_key")
             read_df.clear()
-            st.success("저장 완료") if wrote else st.info("이미 동일 예산이 있어 추가하지 않았습니다.")
+            if wrote:
+
+                st.success(
+            )
+
+            else:
+
+                st.info("저장 완료")
 
     budgets = ensure_cols(read_df("budgets"), ["id","ym","category","target","created_at","dedup_key"])
     b = budgets[budgets["ym"].astype(str)==bym].copy() if not budgets.empty else budgets.iloc[0:0]
@@ -786,4 +800,3 @@ with tabs[5]:
                 use_container_width=True,
                 hide_index=True,
             )
-
