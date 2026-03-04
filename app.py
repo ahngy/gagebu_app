@@ -468,22 +468,52 @@ with tabs[0]:
         )
 
     st.markdown("#### 전체내역")
-    show_fixed = st.checkbox("고정지출 포함해서 보기", value=False)
-    exp_rows = this_month[this_month["type"]=="지출"].copy()
-    if not show_fixed:
-        exp_rows = exp_rows[exp_rows["category"].isin(EXPENSE_CATS)].copy()
 
-    if exp_rows.empty:
-        st.info("선택한 월의 지출 내역이 없습니다.")
+
+    if this_month.empty:
+
+
+        st.info("선택한 월에 내역이 없습니다.")
+
+
     else:
-        show = exp_rows[["day","category","amount","memo","created_at"]].rename(columns={"day":"날짜","category":"카테고리","amount":"금액","memo":"메모","created_at":"등록시각"})
-        st.dataframe(
-            show.style.format({"금액": lambda x: fmt_amount(int(x))})
-            .applymap(lambda v: "color:#ef4444;" if isinstance(v,(int,float)) and v < 0 else "", subset=["금액"])
-            .set_properties(subset=["금액"], **{"text-align":"right"}),
-            use_container_width=True,
-            hide_index=True,
+
+
+        view = this_month.copy()
+
+
+        view["amount"] = pd.to_numeric(view["amount"], errors="coerce").fillna(0).astype(int)
+
+
+        # 수입/지출 모두 표시, created_at(등록시각)은 표시하지 않음
+
+
+        show = view[["day","type","category","amount","memo"]].rename(
+
+
+            columns={"day":"날짜","type":"구분","category":"카테고리","amount":"금액","memo":"메모"}
+
+
         )
+
+
+        st.dataframe(
+
+
+            show.style.format({"금액": lambda x: fmt_amount(int(x))})
+
+
+                .set_properties(subset=["금액"], **{"text-align":"right"}),
+
+
+            use_container_width=True,
+
+
+            hide_index=True,
+
+
+        )
+
 
 # =============================
 # Tab 2: Budgets
@@ -557,6 +587,66 @@ with tabs[2]:
     else:
         view = rules[["name","amount","memo"]].rename(columns={"name":"항목","amount":"금액","memo":"메모"})
         st.dataframe(view.style.format({"금액": lambda x: fmt_amount(int(x))}).set_properties(subset=["금액"], **{"text-align":"right"}), use_container_width=True, hide_index=True)
+
+
+def apply_fixed_to_month(ym: str):
+    """Apply fixed_rules into fixed_applied and ledger for a given ym.
+    Prevents duplicates using dedup_key.
+    """
+    rules = ensure_cols(read_df("fixed_rules"), ["id","name","amount","memo","created_at"])
+    if rules.empty:
+        return False, "고정지출 규칙이 없습니다."
+    applied = ensure_cols(read_df("fixed_applied"), ["id","ym","day","name","amount","memo","created_at","dedup_key"])
+    ledger = ensure_cols(read_df("ledger"), ["id","ym","day","type","category","amount","memo","created_at","dedup_key"])
+    # normalize
+    rules["amount"] = pd.to_numeric(rules["amount"], errors="coerce").fillna(0).astype(int)
+    if not applied.empty:
+        existing_applied = set(applied["dedup_key"].astype(str).tolist())
+    else:
+        existing_applied = set()
+    if not ledger.empty:
+        existing_ledger = set(ledger["dedup_key"].astype(str).tolist())
+    else:
+        existing_ledger = set()
+
+    created = 0
+    for _, r in rules.iterrows():
+        name = str(r.get("name","")).strip()
+        amt = int(r.get("amount",0))
+        memo = str(r.get("memo","")).strip()
+        day = "01일"
+        dk_applied = f"FIX_APPLIED|{ym}|{day}|{name}|{amt}"
+        dk_ledger = f"FIX_LEDGER|{ym}|{day}|{name}|{amt}"
+        if dk_applied not in existing_applied:
+            append_row(
+                "fixed_applied",
+                {
+                    "ym": ym,
+                    "day": day,
+                    "name": name,
+                    "amount": amt,
+                    "memo": memo,
+                    "dedup_key": dk_applied,
+                },
+            )
+            existing_applied.add(dk_applied)
+        if dk_ledger not in existing_ledger:
+            append_row(
+                "ledger",
+                {
+                    "ym": ym,
+                    "day": day,
+                    "type": "지출",
+                    "category": "고정지출",
+                    "amount": amt,
+                    "memo": f"[고정] {name} {memo}".strip(),
+                    "dedup_key": dk_ledger,
+                },
+            )
+            existing_ledger.add(dk_ledger)
+            created += 1
+
+    return True, f"{ym} 고정지출 반영 완료 ({created}건)"
 
 # =============================
 # Tabs 4-5: Events / Zeropay (edit/delete)
