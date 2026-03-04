@@ -598,6 +598,19 @@ def inout_tab(sheet_key: str, title: str):
         hide_index=True,
     )
 
+
+# =============================
+# Tab 4: Events
+# =============================
+with tabs[3]:
+    inout_tab("events", "경조사비")
+
+# =============================
+# Tab 5: Zeropay
+# =============================
+with tabs[4]:
+    inout_tab("zeropay", "제로페이")
+
 # =============================
 # Tab 6: Cards (edit/delete)
 # =============================
