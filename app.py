@@ -171,7 +171,7 @@ def apply_fixed_to_month(ym: str):
                     "type": "지출",
                     "category": "고정지출",
                     "amount": amt,
-                    "memo": f"[고정] {name} {memo}".strip(),
+                    "memo": f"{name} {memo}".strip(),
                     "dedup_key": dk_ledger,
                 },
             )
@@ -786,3 +786,4 @@ with tabs[5]:
                 use_container_width=True,
                 hide_index=True,
             )
+
