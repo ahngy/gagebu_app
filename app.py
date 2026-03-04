@@ -132,6 +132,8 @@ def day_k(d: int) -> str:
 def fmt_amount(n: int) -> str:
     return f"{int(n):,}"
 
+
+
 def metrics_row(income_sum: int, expense_sum: int, shown_balance: int):
     """Render 3 metrics in a single horizontal row (works reliably on iPhone PWA)."""
     st.markdown(
@@ -174,6 +176,7 @@ def metrics_row3(t1: str, v1: int, t2: str, v2: int, t3: str, v3: int):
 """,
         unsafe_allow_html=True,
     )
+
 
 def to_int_amount(s: str):
     s = str(s).strip().replace(",", "")
@@ -332,53 +335,6 @@ def delete_row_by_id(sheet_key: str, row_id: str):
     with_retry(lambda: w.delete_rows(r))
     return True, "삭제 완료"
 
-def find_row_by_field(sheet_key: str, field: str, value: str):
-    h = headers(sheet_key)
-    if field not in h:
-        return None
-    idx = h.index(field) + 1
-    a1 = col_to_a1(idx)
-    w = ws(sheet_key)
-    vals = with_retry(lambda: w.get(f"{a1}2:{a1}"))
-    col = [r[0] for r in vals if r]
-    try:
-        pos0 = col.index(value)
-        return 2 + pos0
-    except ValueError:
-        return None
-
-def update_row_by_rownum(sheet_key: str, row_num: int, updates: dict):
-    w = ws(sheet_key)
-    h = headers(sheet_key)
-    cell_objs = []
-    for k, v in updates.items():
-        if k not in h:
-            continue
-        c = h.index(k) + 1
-        cell_objs.append(gspread.Cell(row_num, c, v))
-    if not cell_objs:
-        return False, "업데이트할 컬럼이 없습니다(헤더 확인)."
-    with_retry(lambda: w.update_cells(cell_objs, value_input_option="USER_ENTERED"))
-    return True, "수정 완료"
-
-def delete_row_by_rownum(sheet_key: str, row_num: int):
-    w = ws(sheet_key)
-    with_retry(lambda: w.delete_rows(row_num))
-    return True, "삭제 완료"
-
-def _make_editor(df, cols_show, cols_edit, key):
-    """Create a data_editor frame with a delete checkbox."""
-    d = df.copy()
-    d["삭제"] = False
-    show_cols = cols_show + ["삭제"]
-    return st.data_editor(
-        d[show_cols],
-        hide_index=True,
-        use_container_width=True,
-        disabled=[c for c in show_cols if c not in cols_edit and c != "삭제"],
-        key=key,
-    )
-
 # =============================
 # Common UI
 # =============================
@@ -505,6 +461,24 @@ with tabs[0]:
             hide_index=True,
         )
 
+    st.markdown("#### 지출내역")
+    show_fixed = st.checkbox("고정지출 포함해서 보기", value=False)
+    exp_rows = this_month[this_month["type"]=="지출"].copy()
+    if not show_fixed:
+        exp_rows = exp_rows[exp_rows["category"].isin(EXPENSE_CATS)].copy()
+
+    if exp_rows.empty:
+        st.info("선택한 월의 지출 내역이 없습니다.")
+    else:
+        show = exp_rows[["day","category","amount","memo","created_at"]].rename(columns={"day":"날짜","category":"카테고리","amount":"금액","memo":"메모","created_at":"등록시각"})
+        st.dataframe(
+            show.style.format({"금액": lambda x: fmt_amount(int(x))})
+            .applymap(lambda v: "color:#ef4444;" if isinstance(v,(int,float)) and v < 0 else "", subset=["금액"])
+            .set_properties(subset=["금액"], **{"text-align":"right"}),
+            use_container_width=True,
+            hide_index=True,
+        )
+
 # =============================
 # Tab 2: Budgets
 # =============================
@@ -577,46 +551,6 @@ with tabs[2]:
     else:
         view = rules[["name","amount","memo"]].rename(columns={"name":"항목","amount":"금액","memo":"메모"})
         st.dataframe(view.style.format({"금액": lambda x: fmt_amount(int(x))}).set_properties(subset=["금액"], **{"text-align":"right"}), use_container_width=True, hide_index=True)
-
-    st.markdown("---")
-    st.markdown("#### 반영하기")
-    fy, fm, fym = month_picker("fixed_apply")
-    apply_day = st.selectbox("반영일(일)", list(range(1, 32)), index=0)
-    apply_day_str = day_k(int(apply_day))
-
-    if st.button("해당 월에 반영", type="primary", disabled=rules.empty):
-        if run_once("fixed_apply_once"):
-            applied_rows, ledger_rows = [], []
-            for _, r in rules.iterrows():
-                nm = str(r.get("name","")).strip()
-                amt = int(r.get("amount",0))
-                mm = str(r.get("memo","")).strip()
-                dk = f"FIX_APPLIED|{fym}|{apply_day_str}|{nm}|{amt}"
-                applied_rows.append({"id":str(uuid.uuid4()),"ym":fym,"day":apply_day_str,"name":nm,"amount":amt,"memo":mm,"created_at":now_str(),"dedup_key":dk})
-                ldk = f"FIX_LEDGER|{fym}|{apply_day_str}|{nm}|{amt}"
-                ledger_rows.append({"id":str(uuid.uuid4()),"ym":fym,"day":apply_day_str,"type":"지출","category":"고정지출","amount":amt,"memo":f"[고정] {nm} {mm}".strip(),"created_at":now_str(),"dedup_key":ldk})
-            wrote, skipped = safe_append_rows("fixed_applied", applied_rows, dedup_key_field="dedup_key")
-            if wrote:
-                safe_append_rows("ledger", ledger_rows, dedup_key_field="dedup_key")
-            read_df.clear()
-            st.success(f"{wrote}건 반영 완료 (중복 {skipped}건 제외)") if wrote else st.info(f"이미 반영됨 (중복 {skipped}건)")
-        else:
-            st.info("이미 실행되었습니다.")
-
-    applied = ensure_cols(read_df("fixed_applied"), ["id","ym","day","name","amount","memo","created_at","dedup_key"])
-    a = applied[applied["ym"].astype(str)==fym].copy() if not applied.empty else applied.iloc[0:0]
-    st.markdown("#### 해당 월 반영 내역")
-    if a.empty:
-        st.info("해당 월에 반영된 고정지출이 없습니다.")
-    else:
-        a["amount"] = pd.to_numeric(a["amount"], errors="coerce").fillna(0).astype(int)
-        view = a[["day","name","amount","memo"]].rename(columns={"day":"날짜","name":"항목","amount":"금액","memo":"메모"})
-        st.dataframe(view.style.format({"금액": lambda x: fmt_amount(int(x))}).set_properties(subset=["금액"], **{"text-align":"right"}), use_container_width=True, hide_index=True)
-
-        st.markdown("#### 표에서 바로 수정/삭제 (반영내역 + 가계부 연동)")
-        a_inline = a.copy()
-        a_inline["amount"] = pd.to_numeric(a_inline["amount"], errors="coerce").fillna(0).astype(int)
-        # 함께 수정될 ledger 행은 dedup_key로 찾음
 
 # =============================
 # Tabs 4-5: Events / Zeropay (edit/delete)
@@ -694,26 +628,21 @@ with tabs[5]:
         view = cards[["card_name","benefit_memo"]].rename(columns={"card_name":"카드명","benefit_memo":"혜택 메모"})
         st.dataframe(view, use_container_width=True, hide_index=True)
 
+
+
+        subs = ensure_cols(read_df("subscriptions"), ["id","card_name","merchant","amount","billing_day","memo","created_at"])
+        if not subs.empty:
+            subs["amount"] = pd.to_numeric(subs["amount"], errors="coerce").fillna(0).astype(int)
+
         st.markdown("#### 카드별 정기결제 내역")
-
         if subs.empty:
-
             st.info("정기결제 내역이 없습니다.")
-
         else:
-
             sel = st.selectbox("카드 선택", sorted(subs["card_name"].astype(str).unique().tolist()), key="sub_card_pick")
-
             sub_view = subs[subs["card_name"].astype(str) == sel].copy()
-
             show = sub_view[["merchant","amount","billing_day","memo"]].rename(columns={"merchant":"가맹점/서비스","amount":"금액","billing_day":"결제일","memo":"메모"})
-
             st.dataframe(
-
                 show.style.format({"금액": lambda x: fmt_amount(int(x))}).set_properties(subset=["금액"], **{"text-align":"right"}),
-
                 use_container_width=True,
-
                 hide_index=True,
-
             )
