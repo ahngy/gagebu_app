@@ -132,8 +132,6 @@ def day_k(d: int) -> str:
 def fmt_amount(n: int) -> str:
     return f"{int(n):,}"
 
-
-
 def metrics_row(income_sum: int, expense_sum: int, shown_balance: int):
     """Render 3 metrics in a single horizontal row (works reliably on iPhone PWA)."""
     st.markdown(
@@ -176,7 +174,6 @@ def metrics_row3(t1: str, v1: int, t2: str, v2: int, t3: str, v3: int):
 """,
         unsafe_allow_html=True,
     )
-
 
 def to_int_amount(s: str):
     s = str(s).strip().replace(",", "")
@@ -382,7 +379,6 @@ def _make_editor(df, cols_show, cols_edit, key):
         key=key,
     )
 
-
 # =============================
 # Common UI
 # =============================
@@ -579,43 +575,6 @@ with tabs[0]:
             read_df.clear()
             st.success("반영 완료")
 
-    st.markdown("#### 내역 수정/삭제")
-    if this_month.empty:
-        st.info("선택한 월에 수정/삭제할 내역이 없습니다.")
-    else:
-        tmp = this_month.copy()
-        tmp["label"] = tmp.apply(lambda r: f"{r.get('day','')} | {r.get('type','')} | {r.get('category','')} | {fmt_amount(int(r.get('amount',0)))} | {str(r.get('memo',''))[:12]}", axis=1)
-        _, sel_id = record_selector(tmp, "label", "ledger_pick")
-        sel_row = tmp[tmp["id"].astype(str)==str(sel_id)].iloc[0]
-
-        with st.form("ledger_edit"):
-            new_type = st.selectbox("구분", ["수입","지출"], index=0 if sel_row["type"]=="수입" else 1)
-            base_day = int(str(sel_row["day"])[:2]) if str(sel_row["day"])[:2].isdigit() else 1
-            new_date = st.date_input("날짜", value=dt_date(y, m, base_day))
-            new_cats = INCOME_CATS if new_type=="수입" else EXPENSE_CATS
-            new_cat = st.selectbox("카테고리", new_cats, index=(new_cats.index(sel_row["category"]) if sel_row["category"] in new_cats else 0))
-            new_amt = st.text_input("금액", value=fmt_amount(int(sel_row["amount"])))
-            new_memo = st.text_input("메모", value=str(sel_row.get("memo","")))
-            do_u = st.form_submit_button("수정", type="primary")
-            do_d = st.form_submit_button("삭제", type="secondary")
-
-        if do_u and run_once("ledger_update_once"):
-            amt = to_int_amount(new_amt)
-            if amt is None:
-                st.error("금액 형식을 확인해 주세요.")
-            else:
-                row_ym = ym_from(new_date.year, new_date.month)
-                row_day = day_k(new_date.day)
-                dk = f"LEDGER|{row_ym}|{row_day}|{new_type}|{new_cat}|{amt}|{new_memo.strip()}"
-                ok2, msg = update_row_by_id("ledger", sel_id, {"ym":row_ym,"day":row_day,"type":new_type,"category":new_cat,"amount":amt,"memo":new_memo.strip(),"dedup_key":dk})
-                read_df.clear()
-                st.success(msg) if ok2 else st.error(msg)
-
-        if do_d and run_once("ledger_delete_once"):
-            ok2, msg = delete_row_by_id("ledger", sel_id)
-            read_df.clear()
-            st.success(msg) if ok2 else st.error(msg)
-
 # =============================
 # Tab 2: Budgets
 # =============================
@@ -651,60 +610,6 @@ with tabs[1]:
         view = view.sort_values(["__ord","카테고리"]).drop(columns="__ord")
         st.markdown("#### 예산 목록")
         st.dataframe(view.style.format({"목표금액": lambda x: fmt_amount(int(x))}).set_properties(subset=["목표금액"], **{"text-align":"right"}), use_container_width=True, hide_index=True)
-
-
-        st.markdown("#### 표에서 바로 수정/삭제")
-        b_inline = b.copy()
-        b_inline["target"] = pd.to_numeric(b_inline["target"], errors="coerce").fillna(0).astype(int)
-        edited = _make_editor(
-            b_inline.rename(columns={"category":"카테고리","target":"목표금액"}).assign(카테고리=b_inline["category"].astype(str)),
-            cols_show=["카테고리","목표금액"],
-            cols_edit=["목표금액"],
-            key="budget_inline_editor",
-        )
-        if st.button("✅ 변경사항 저장/삭제 반영", type="primary", key="budget_inline_apply"):
-            orig = b_inline.set_index("id")
-            for i, row in edited.iterrows():
-                rid = str(b_inline.iloc[i]["id"])
-                if bool(row.get("삭제", False)):
-                    delete_row_by_id("budgets", rid)
-                    continue
-                t = to_int_amount(row.get("목표금액", ""))
-                if t is None:
-                    try:
-                        t = int(row.get("목표금액"))
-                    except:
-                        st.error(f"목표금액 오류: {row.get('목표금액')}")
-                        st.stop()
-                cat = str(b_inline.iloc[i]["category"])
-                dk = f"BUDGET|{bym}|{cat}|{int(t)}"
-                if int(orig.loc[rid].get("target",0)) != int(t):
-                    update_row_by_id("budgets", rid, {"target": int(t), "dedup_key": dk})
-            read_df.clear()
-            st.success("반영 완료")
-
-        st.markdown("#### 예산 수정/삭제")
-        b2 = b.copy()
-        b2["label"] = b2.apply(lambda r: f"{r['category']} | {fmt_amount(int(r['target']))}", axis=1)
-        _, sel_id = record_selector(b2, "label", "budget_pick")
-        row = b2[b2["id"].astype(str)==str(sel_id)].iloc[0]
-        with st.form("budget_edit"):
-            new_target = st.text_input("목표금액", value=fmt_amount(int(row["target"])))
-            do_u = st.form_submit_button("수정", type="primary")
-            do_d = st.form_submit_button("삭제", type="secondary")
-        if do_u and run_once("budget_update_once"):
-            t = to_int_amount(new_target)
-            if t is None or t < 0:
-                st.error("목표금액은 0 이상의 숫자로 입력해 주세요.")
-            else:
-                dk = f"BUDGET|{row['ym']}|{row['category']}|{t}"
-                ok2, msg = update_row_by_id("budgets", sel_id, {"target":t,"dedup_key":dk})
-                read_df.clear()
-                st.success(msg) if ok2 else st.error(msg)
-        if do_d and run_once("budget_delete_once"):
-            ok2, msg = delete_row_by_id("budgets", sel_id)
-            read_df.clear()
-            st.success(msg) if ok2 else st.error(msg)
 
 # =============================
 # Tab 3: Fixed (category fixed)
@@ -743,43 +648,6 @@ with tabs[2]:
         view = rules[["name","amount","memo"]].rename(columns={"name":"항목","amount":"금액","memo":"메모"})
         st.dataframe(view.style.format({"금액": lambda x: fmt_amount(int(x))}).set_properties(subset=["금액"], **{"text-align":"right"}), use_container_width=True, hide_index=True)
 
-    st.markdown("#### 표에서 바로 수정/삭제")
-    if rules.empty:
-        st.info("수정/삭제할 항목이 없습니다.")
-    else:
-        r_inline = rules.copy()
-        r_inline["amount"] = pd.to_numeric(r_inline["amount"], errors="coerce").fillna(0).astype(int)
-        edited = _make_editor(
-            r_inline.rename(columns={"name":"항목","amount":"금액","memo":"메모"}),
-            cols_show=["항목","금액","메모"],
-            cols_edit=["항목","금액","메모"],
-            key="fixed_rule_inline_editor",
-        )
-        if st.button("✅ 변경사항 저장/삭제 반영", type="primary", key="fixed_rule_inline_apply"):
-            orig = r_inline.set_index("id")
-            for i, row in edited.iterrows():
-                rid = str(r_inline.iloc[i]["id"])
-                if bool(row.get("삭제", False)):
-                    delete_row_by_id("fixed_rules", rid)
-                    continue
-                name = str(row.get("항목","")).strip()
-                if not name:
-                    st.error("항목명은 비울 수 없습니다.")
-                    st.stop()
-                amt = to_int_amount(row.get("금액",""))
-                if amt is None:
-                    try:
-                        amt = int(row.get("금액"))
-                    except:
-                        st.error(f"금액 오류: {row.get('금액')}")
-                        st.stop()
-                memo = str(row.get("메모","")).strip()
-                o = orig.loc[rid]
-                if str(o.get("name","")) != name or int(o.get("amount",0)) != int(amt) or str(o.get("memo","")) != memo:
-                    update_row_by_id("fixed_rules", rid, {"name": name, "amount": int(amt), "memo": memo})
-            read_df.clear()
-            st.success("반영 완료")
-
     st.markdown("---")
     st.markdown("#### 반영하기")
     fy, fm, fym = month_picker("fixed_apply")
@@ -814,7 +682,6 @@ with tabs[2]:
         a["amount"] = pd.to_numeric(a["amount"], errors="coerce").fillna(0).astype(int)
         view = a[["day","name","amount","memo"]].rename(columns={"day":"날짜","name":"항목","amount":"금액","memo":"메모"})
         st.dataframe(view.style.format({"금액": lambda x: fmt_amount(int(x))}).set_properties(subset=["금액"], **{"text-align":"right"}), use_container_width=True, hide_index=True)
-
 
         st.markdown("#### 표에서 바로 수정/삭제 (반영내역 + 가계부 연동)")
         a_inline = a.copy()
@@ -873,32 +740,6 @@ with tabs[2]:
             read_df.clear()
             st.success("반영 완료")
 
-        st.markdown("#### 반영 내역 수정/삭제")
-        a2 = a.copy()
-        a2["label"] = a2.apply(lambda r: f"{r['day']} | {r['name']} | {fmt_amount(int(r['amount']))}", axis=1)
-        _, sel_id = record_selector(a2, "label", "fixed_applied_pick")
-        row = a2[a2["id"].astype(str)==str(sel_id)].iloc[0]
-        with st.form("fixed_applied_edit"):
-            new_day = st.selectbox("날짜(일)", list(range(1, 32)), index=max(0, int(str(row["day"])[:2]) - 1))
-            new_amt = st.text_input("금액", value=fmt_amount(int(row["amount"])))
-            new_memo = st.text_input("메모", value=str(row.get("memo","")))
-            do_u = st.form_submit_button("수정", type="primary")
-            do_d = st.form_submit_button("삭제", type="secondary")
-        if do_u and run_once("fixed_applied_update_once"):
-            amt = to_int_amount(new_amt)
-            if amt is None or amt <= 0:
-                st.error("금액은 1 이상으로 입력해 주세요.")
-            else:
-                nd = day_k(int(new_day))
-                dk = f"FIX_APPLIED|{row['ym']}|{nd}|{row['name']}|{amt}"
-                ok2, msg = update_row_by_id("fixed_applied", sel_id, {"day":nd,"amount":amt,"memo":new_memo.strip(),"dedup_key":dk})
-                read_df.clear()
-                st.success(msg) if ok2 else st.error(msg)
-        if do_d and run_once("fixed_applied_delete_once"):
-            ok2, msg = delete_row_by_id("fixed_applied", sel_id)
-            read_df.clear()
-            st.success(msg) if ok2 else st.error(msg)
-
 # =============================
 # Tabs 4-5: Events / Zeropay (edit/delete)
 # =============================
@@ -945,37 +786,6 @@ def inout_tab(sheet_key: str, title: str):
         hide_index=True,
     )
 
-    st.markdown("#### 수정/삭제")
-    df2 = df.copy()
-    df2["label"] = df2.apply(lambda r: f"{r['day']} | {r['type']} | {fmt_amount(int(r['amount']))} | {str(r.get('memo',''))[:12]}", axis=1)
-    _, sel_id = record_selector(df2, "label", f"{sheet_key}_pick")
-    row = df2[df2["id"].astype(str)==str(sel_id)].iloc[0]
-    with st.form(f"{sheet_key}_edit"):
-        new_type = st.selectbox("구분", ["수입","지출"], index=0 if row["type"]=="수입" else 1)
-        new_day = st.selectbox("날짜(일)", list(range(1,32)), index=max(0,int(str(row["day"])[:2])-1))
-        new_amt = st.text_input("금액", value=fmt_amount(int(row["amount"])))
-        new_memo = st.text_input("메모", value=str(row.get("memo","")))
-        do_u = st.form_submit_button("수정", type="primary")
-        do_d = st.form_submit_button("삭제", type="secondary")
-    if do_u and run_once(f"{sheet_key}_update_once"):
-        amt = to_int_amount(new_amt)
-        if amt is None:
-            st.error("금액 형식을 확인해 주세요.")
-        else:
-            ok2, msg = update_row_by_id(sheet_key, sel_id, {"type":new_type,"day":day_k(int(new_day)),"amount":amt,"memo":new_memo.strip()})
-            read_df.clear()
-            st.success(msg) if ok2 else st.error(msg)
-    if do_d and run_once(f"{sheet_key}_delete_once"):
-        ok2, msg = delete_row_by_id(sheet_key, sel_id)
-        read_df.clear()
-        st.success(msg) if ok2 else st.error(msg)
-
-with tabs[3]:
-    inout_tab("events", "경조사비")
-
-with tabs[4]:
-    inout_tab("zeropay", "제로페이")
-
 # =============================
 # Tab 6: Cards (edit/delete)
 # =============================
@@ -1006,91 +816,11 @@ with tabs[5]:
         view = cards[["card_name","benefit_memo"]].rename(columns={"card_name":"카드명","benefit_memo":"혜택 메모"})
         st.dataframe(view, use_container_width=True, hide_index=True)
 
-
-        st.markdown("#### 표에서 바로 수정/삭제")
-        c_inline = cards.copy()
-        edited = _make_editor(
-            c_inline.rename(columns={"card_name":"카드명","benefit_memo":"혜택 메모"}),
-            cols_show=["카드명","혜택 메모"],
-            cols_edit=["카드명","혜택 메모"],
-            key="cards_inline_editor",
-        )
-        if st.button("✅ 변경사항 저장/삭제 반영", type="primary", key="cards_inline_apply"):
-            orig = c_inline.set_index("id")
-            for i, row in edited.iterrows():
-                rid = str(c_inline.iloc[i]["id"])
-                if bool(row.get("삭제", False)):
-                    delete_row_by_id("cards", rid)
-                    continue
-                name = str(row.get("카드명","")).strip()
-                memo = str(row.get("혜택 메모","")).strip()
-                if not name:
-                    st.error("카드명은 비울 수 없습니다.")
-                    st.stop()
-                o = orig.loc[rid]
-                if str(o.get("card_name","")) != name or str(o.get("benefit_memo","")) != memo:
-                    update_row_by_id("cards", rid, {"card_name": name, "benefit_memo": memo})
-            read_df.clear()
-            st.success("반영 완료")
-
-        st.markdown("#### 카드 수정/삭제")
-        c2 = cards.copy()
-        c2["label"] = c2.apply(lambda r: f"{r['card_name']} | {str(r.get('benefit_memo',''))[:16]}", axis=1)
-        _, sel_id = record_selector(c2, "label", "card_pick")
-        row = c2[c2["id"].astype(str)==str(sel_id)].iloc[0]
-        with st.form("card_edit"):
-            new_name = st.text_input("카드명", value=str(row["card_name"]))
-            new_benefit = st.text_area("혜택 메모", value=str(row.get("benefit_memo","")), height=80)
-            do_u = st.form_submit_button("수정", type="primary")
-            do_d = st.form_submit_button("삭제", type="secondary")
-        if do_u and run_once("card_update_once"):
-            if not new_name.strip():
-                st.error("카드명을 입력해 주세요.")
-            else:
-                ok2, msg = update_row_by_id("cards", sel_id, {"card_name":new_name.strip(),"benefit_memo":new_benefit.strip()})
-                read_df.clear()
-                st.success(msg) if ok2 else st.error(msg)
-        if do_d and run_once("card_delete_once"):
-            ok2, msg = delete_row_by_id("cards", sel_id)
-            read_df.clear()
-            st.success(msg) if ok2 else st.error(msg)
-
-    st.markdown("---")
-    st.markdown("#### 정기결제 관리")
-    with st.form("sub_add", clear_on_submit=True):
-        sub_card = st.selectbox("카드", card_list if card_list else ["(카드 먼저 등록)"], disabled=not bool(card_list))
-        merchant = st.text_input("가맹점/서비스", placeholder="예: 넷플릭스")
-        amt_str = st.text_input("금액", placeholder="예: 13,500")
-        billing_day = st.selectbox("결제일(일)", list(range(1, 32)))
-        memo = st.text_input("메모", placeholder="예: 프리미엄")
-        ok2 = st.form_submit_button("정기결제 저장", type="primary", disabled=not bool(card_list))
-    if ok2 and run_once("sub_add_once"):
-        amt = to_int_amount(amt_str)
-        if not merchant.strip():
-            st.error("가맹점/서비스명을 입력해 주세요.")
-        elif amt is None or amt <= 0:
-            st.error("금액은 1 이상으로 입력해 주세요.")
-        else:
-            row = {"id":str(uuid.uuid4()),"card_name":sub_card,"merchant":merchant.strip(),"amount":amt,"billing_day":int(billing_day),"memo":memo.strip(),"created_at":now_str()}
-            safe_append_rows("subscriptions", [row])
-            read_df.clear()
-            st.success("저장 완료")
-
-    subs = ensure_cols(read_df("subscriptions"), ["id","card_name","merchant","amount","billing_day","memo","created_at"])
-    if subs.empty:
-        st.info("정기결제 내역이 없습니다.")
-    else:
-        subs["amount"] = pd.to_numeric(subs["amount"], errors="coerce").fillna(0).astype(int)
-        st.markdown("#### 카드별 정기결제 총액")
-        total_by_card = subs.groupby("card_name")["amount"].sum().reset_index().rename(columns={"card_name":"카드명","amount":"총액"})
-        st.dataframe(total_by_card.style.format({"총액": lambda x: fmt_amount(int(x))}).set_properties(subset=["총액"], **{"text-align":"right"}), use_container_width=True, hide_index=True)
-
         st.markdown("#### 카드별 정기결제 내역")
         sel = st.selectbox("카드 선택", sorted(subs["card_name"].astype(str).unique().tolist()), key="sub_card_pick")
         sub_view = subs[subs["card_name"].astype(str)==sel].copy()
         show = sub_view[["merchant","amount","billing_day","memo"]].rename(columns={"merchant":"가맹점/서비스","amount":"금액","billing_day":"결제일","memo":"메모"})
         st.dataframe(show.style.format({"금액": lambda x: fmt_amount(int(x))}).set_properties(subset=["금액"], **{"text-align":"right"}), use_container_width=True, hide_index=True)
-
 
         st.markdown("#### 표에서 바로 수정/삭제 (선택된 카드)")
         s_inline = sub_view.copy()
@@ -1132,30 +862,3 @@ with tabs[5]:
                     update_row_by_id("subscriptions", rid, {"merchant": merch, "amount": int(amt), "billing_day": bday, "memo": memo})
             read_df.clear()
             st.success("반영 완료")
-
-        st.markdown("#### 정기결제 수정/삭제")
-        s2 = sub_view.copy()
-        s2["label"] = s2.apply(lambda r: f"{r['merchant']} | {fmt_amount(int(r['amount']))} | {int(r['billing_day'])}일", axis=1)
-        _, sel_id2 = record_selector(s2, "label", "sub_pick")
-        row = s2[s2["id"].astype(str)==str(sel_id2)].iloc[0]
-        with st.form("sub_edit"):
-            new_merchant = st.text_input("가맹점/서비스", value=str(row["merchant"]))
-            new_amt = st.text_input("금액", value=fmt_amount(int(row["amount"])))
-            new_day = st.selectbox("결제일(일)", list(range(1,32)), index=int(row["billing_day"])-1)
-            new_memo = st.text_input("메모", value=str(row.get("memo","")))
-            do_u = st.form_submit_button("수정", type="primary")
-            do_d = st.form_submit_button("삭제", type="secondary")
-        if do_u and run_once("sub_update_once"):
-            amt = to_int_amount(new_amt)
-            if not new_merchant.strip():
-                st.error("가맹점/서비스명을 입력해 주세요.")
-            elif amt is None or amt <= 0:
-                st.error("금액은 1 이상으로 입력해 주세요.")
-            else:
-                ok3, msg = update_row_by_id("subscriptions", sel_id2, {"merchant":new_merchant.strip(),"amount":amt,"billing_day":int(new_day),"memo":new_memo.strip()})
-                read_df.clear()
-                st.success(msg) if ok3 else st.error(msg)
-        if do_d and run_once("sub_delete_once"):
-            ok3, msg = delete_row_by_id("subscriptions", sel_id2)
-            read_df.clear()
-            st.success(msg) if ok3 else st.error(msg)
