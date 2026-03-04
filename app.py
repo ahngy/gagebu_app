@@ -558,6 +558,17 @@ with tabs[2]:
     st.subheader("고정지출")
     st.caption("카테고리는 자동으로 '고정지출'로 저장됩니다.")
 
+    # 반영할 월 선택
+    fy, fm, fym = month_picker("fixed")
+    if st.button("📌 선택한 월에 고정지출 반영", type="primary", key="apply_fixed_btn"):
+        ok, msg = apply_fixed_to_month(fym)
+        if ok:
+            read_df.clear()
+            st.success(msg)
+        else:
+            st.error(msg)
+
+
     st.markdown("#### 내역")
     with st.form("fixed_rule_add", clear_on_submit=True):
         name = st.text_input("항목명", placeholder="예: 통신비")
