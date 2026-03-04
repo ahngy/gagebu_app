@@ -376,15 +376,11 @@ with tabs[0]:
     bmode = st.radio("잔액 보기", ["선택 월 기준", "당해년도 월 누적"], horizontal=True)
     shown_balance = balance_month if bmode == "선택 월 기준" else balance_ytd
 
-    if mobile_mode:
-        st.metric("수입합계", fmt_amount(income_sum))
-        st.metric("지출합계", fmt_amount(expense_sum))
-        st.metric("잔액", fmt_amount(shown_balance))
-    else:
-        c1, c2, c3 = st.columns(3)
-        c1.metric("수입합계", fmt_amount(income_sum))
-        c2.metric("지출합계", fmt_amount(expense_sum))
-        c3.metric("잔액", fmt_amount(shown_balance))
+    c1, c2, c3 = st.columns(3)
+
+    c1.metric("수입합계", fmt_amount(income_sum))
+    c2.metric("지출합계", fmt_amount(expense_sum))
+    c3.metric("잔액", fmt_amount(shown_balance))
 
     st.markdown("#### 예산현황")
     budgets = ensure_cols(read_df("budgets"), ["id","ym","category","target","created_at","dedup_key"])
