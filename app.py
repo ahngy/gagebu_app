@@ -186,6 +186,23 @@ def apply_fixed_to_month(ym: str):
 def now_str() -> str:
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
+
+def append_row(sheet_key: str, data: dict):
+    """Append a row to a sheet using header order. Auto-fills id/created_at if columns exist."""
+    h = headers(sheet_key)
+    row = []
+    for col in h:
+        if col == "id":
+            row.append(str(data.get("id") or uuid.uuid4()))
+        elif col == "created_at":
+            row.append(str(data.get("created_at") or now_str()))
+        else:
+            v = data.get(col, "")
+            row.append("" if v is None else str(v))
+    w = ws(sheet_key)
+    with_retry(lambda: w.append_row(row, value_input_option="USER_ENTERED"))
+    return True
+
 def ym_from(y: int, m: int) -> str:
     return f"{y:04d}-{m:02d}"
 
