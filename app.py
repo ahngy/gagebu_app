@@ -509,26 +509,6 @@ with tabs[0]:
             hide_index=True,
         )
 
-    st.markdown("#### 지출내역")
-    show_fixed = st.checkbox("고정지출 포함해서 보기", value=False)
-    exp_rows = this_month[this_month["type"]=="지출"].copy()
-    if not show_fixed:
-        exp_rows = exp_rows[exp_rows["category"].isin(EXPENSE_CATS)].copy()
-
-    if exp_rows.empty:
-        st.info("선택한 월의 지출 내역이 없습니다.")
-    else:
-        show = exp_rows[["day","category","amount","memo","created_at"]].rename(columns={"day":"날짜","category":"카테고리","amount":"금액","memo":"메모","created_at":"등록시각"})
-        st.dataframe(
-            show.style.format({"금액": lambda x: fmt_amount(int(x))})
-            .applymap(lambda v: "color:#ef4444;" if isinstance(v,(int,float)) and v < 0 else "", subset=["금액"])
-            .set_properties(subset=["금액"], **{"text-align":"right"}),
-            use_container_width=True,
-            hide_index=True,
-        )
-
-
-    st.markdown("#### 표에서 바로 수정/삭제")
     if this_month.empty:
         st.info("선택한 월에 수정/삭제할 내역이 없습니다.")
     else:
