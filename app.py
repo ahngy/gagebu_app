@@ -15,6 +15,7 @@ from google.oauth2.service_account import Credentials
 # Page / iOS PWA meta
 # =============================
 st.set_page_config(page_title="가계부", layout="centered", initial_sidebar_state="collapsed")
+st.session_state['_nonce'] = st.session_state.get('_nonce', 0) + 1
 
 components.html(
     """
@@ -223,9 +224,14 @@ def col_to_a1(col_idx_1based: int) -> str:
     return s
 
 def run_once(key: str) -> bool:
-    if st.session_state.get(key):
+    """Allow an action once per *interaction*, not once per app lifetime.
+    Uses an incrementing nonce that changes on each rerun where this function is called.
+    """
+    nonce = st.session_state.get("_nonce", 0)
+    last = st.session_state.get(f"_once_{key}")
+    if last == nonce:
         return False
-    st.session_state[key] = True
+    st.session_state[f"_once_{key}"] = nonce
     return True
 
 # =============================
@@ -461,7 +467,7 @@ with tabs[0]:
             hide_index=True,
         )
 
-    st.markdown("#### 지출내역")
+    st.markdown("#### 전체내역")
     show_fixed = st.checkbox("고정지출 포함해서 보기", value=False)
     exp_rows = this_month[this_month["type"]=="지출"].copy()
     if not show_fixed:
@@ -589,7 +595,7 @@ def inout_tab(sheet_key: str, title: str):
     metrics_row3("전체 수입합계", inc, "전체 지출합계", exp, "차액", diff)
 
     st.markdown("#### 전체 내역")
-    show = df[["day","type","amount","memo","created_at"]].rename(columns={"day":"날짜","type":"구분","amount":"금액","memo":"메모","created_at":"등록시각"})
+    show = df[["day","type","amount","memo"]].rename(columns={"day":"날짜","type":"구분","amount":"금액","memo":"메모"})
     st.dataframe(
         show.style.format({"금액": lambda x: fmt_amount(int(x))})
         .applymap(lambda v: "color:#ef4444;" if isinstance(v,(int,float)) and v < 0 else "", subset=["금액"])
