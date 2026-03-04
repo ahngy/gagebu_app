@@ -817,48 +817,36 @@ with tabs[5]:
         st.dataframe(view, use_container_width=True, hide_index=True)
 
         st.markdown("#### 카드별 정기결제 내역")
-        sel = st.selectbox("카드 선택", sorted(subs["card_name"].astype(str).unique().tolist()), key="sub_card_pick")
-        sub_view = subs[subs["card_name"].astype(str)==sel].copy()
-        show = sub_view[["merchant","amount","billing_day","memo"]].rename(columns={"merchant":"가맹점/서비스","amount":"금액","billing_day":"결제일","memo":"메모"})
-        st.dataframe(show.style.format({"금액": lambda x: fmt_amount(int(x))}).set_properties(subset=["금액"], **{"text-align":"right"}), use_container_width=True, hide_index=True)
 
-        st.markdown("#### 표에서 바로 수정/삭제 (선택된 카드)")
-        s_inline = sub_view.copy()
-        s_inline["amount"] = pd.to_numeric(s_inline["amount"], errors="coerce").fillna(0).astype(int)
-        edited = _make_editor(
-            s_inline.rename(columns={"merchant":"가맹점/서비스","amount":"금액","billing_day":"결제일","memo":"메모"}),
-            cols_show=["가맹점/서비스","금액","결제일","메모"],
-            cols_edit=["가맹점/서비스","금액","결제일","메모"],
-            key="subs_inline_editor",
-        )
-        if st.button("✅ 변경사항 저장/삭제 반영", type="primary", key="subs_inline_apply"):
-            orig = s_inline.set_index("id")
-            for i, row in edited.iterrows():
-                rid = str(s_inline.iloc[i]["id"])
-                if bool(row.get("삭제", False)):
-                    delete_row_by_id("subscriptions", rid)
-                    continue
-                merch = str(row.get("가맹점/서비스","")).strip()
-                if not merch:
-                    st.error("가맹점/서비스는 비울 수 없습니다.")
-                    st.stop()
-                amt = to_int_amount(row.get("금액",""))
-                if amt is None:
-                    try: amt = int(row.get("금액"))
-                    except:
-                        st.error(f"금액 오류: {row.get('금액')}")
-                        st.stop()
-                try:
-                    bday = int(row.get("결제일"))
-                except:
-                    st.error(f"결제일 오류: {row.get('결제일')}")
-                    st.stop()
-                if not (1 <= bday <= 31):
-                    st.error("결제일은 1~31 사이여야 합니다.")
-                    st.stop()
-                memo = str(row.get("메모","")).strip()
-                o = orig.loc[rid]
-                if str(o.get("merchant","")) != merch or int(o.get("amount",0)) != int(amt) or int(o.get("billing_day",0)) != bday or str(o.get("memo","")) != memo:
-                    update_row_by_id("subscriptions", rid, {"merchant": merch, "amount": int(amt), "billing_day": bday, "memo": memo})
-            read_df.clear()
-            st.success("반영 완료")
+
+        if subs.empty:
+
+
+            st.info("정기결제 내역이 없습니다.")
+
+
+        else:
+
+
+            sel = st.selectbox("카드 선택", sorted(subs["card_name"].astype(str).unique().tolist()), key="sub_card_pick")
+
+
+            sub_view = subs[subs["card_name"].astype(str) == sel].copy()
+
+
+            show = sub_view[["merchant","amount","billing_day","memo"]].rename(columns={"merchant":"가맹점/서비스","amount":"금액","billing_day":"결제일","memo":"메모"})
+
+
+            st.dataframe(
+
+
+                show.style.format({"금액": lambda x: fmt_amount(int(x))}).set_properties(subset=["금액"], **{"text-align":"right"}),
+
+
+                use_container_width=True,
+
+
+                hide_index=True,
+
+
+            )
