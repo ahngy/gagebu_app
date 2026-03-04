@@ -499,13 +499,9 @@ with tabs[0]:
             wrote, _ = safe_append_rows("ledger", [row], dedup_key_field="dedup_key")
             read_df.clear()
             if wrote:
-
-                st.success(
-            )
-
+                st.success("저장 완료")
             else:
-
-                st.info("저장 완료")
+                st.info("동일 내용이 이미 있어 추가하지 않았습니다.")
 
     ledger = ensure_cols(read_df("ledger"), ["id","ym","day","type","category","amount","memo","created_at","dedup_key"])
     if not ledger.empty:
@@ -624,13 +620,9 @@ with tabs[1]:
             wrote, _ = safe_append_rows("budgets", [row], dedup_key_field="dedup_key")
             read_df.clear()
             if wrote:
-
-                st.success(
-            )
-
+                st.success("저장 완료")
             else:
-
-                st.info("저장 완료")
+                st.info("동일 내용이 이미 있어 추가하지 않았습니다.")
 
     budgets = ensure_cols(read_df("budgets"), ["id","ym","category","target","created_at","dedup_key"])
     b = budgets[budgets["ym"].astype(str)==bym].copy() if not budgets.empty else budgets.iloc[0:0]
