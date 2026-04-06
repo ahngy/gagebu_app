@@ -485,7 +485,7 @@ with tabs[0]:
         st.dataframe(
             view.style
             .format({c: (lambda x: fmt_amount(int(x))) for c in ["목표금액","실제지출금액","차액"]})
-            .applymap(lambda v: "color:#ef4444;" if isinstance(v,(int,float)) and v < 0 else "", subset=["차액"])
+            .map(lambda v: "color:#ef4444;" if isinstance(v,(int,float)) and v < 0 else "", subset=["차액"])
             .set_properties(subset=["목표금액","실제지출금액","차액"], **{"text-align":"right"}),
             use_container_width=True,
             hide_index=True,
@@ -655,7 +655,7 @@ def inout_tab(sheet_key: str, title: str):
     show = df[["day","type","amount","memo"]].rename(columns={"day":"날짜","type":"구분","amount":"금액","memo":"메모"})
     st.dataframe(
         show.style.format({"금액": lambda x: fmt_amount(int(x))})
-        .applymap(lambda v: "color:#ef4444;" if isinstance(v,(int,float)) and v < 0 else "", subset=["금액"])
+        .map(lambda v: "color:#ef4444;" if isinstance(v,(int,float)) and v < 0 else "", subset=["금액"])
         .set_properties(subset=["금액"], **{"text-align":"right"}),
         use_container_width=True,
         hide_index=True,
