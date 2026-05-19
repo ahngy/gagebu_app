@@ -764,6 +764,128 @@ with tabs[5]:
                 use_container_width=True,
                 hide_index=True,
             )
+            
+            st.markdown("#### 정기결제 수정 / 삭제")
+            
+            edit_target = st.selectbox(
+                "수정할 항목 선택",
+                sub_view["merchant"].astype(str) + " / " + sub_view["billing_day"].astype(str) + "일",
+                key="sub_edit_select"
+            )
+            
+            selected_row = sub_view[
+                (
+                    sub_view["merchant"].astype(str)
+                    + " / "
+                    + sub_view["billing_day"].astype(str)
+                    + "일"
+                ) == edit_target
+            ].iloc[0]
+            
+            with st.form("subscription_edit_form"):
+
+                new_merchant = st.text_input(
+                    "가맹점/서비스",
+                    value=str(selected_row["merchant"])
+                )
+                
+                new_amount = st.text_input(
+                    "금액",
+                    value=str(selected_row["amount"])
+                )
+                
+                new_day = st.text_input(
+                    "결제일",
+                    value=str(selected_row["billing_day"])
+                )
+                new_memo = st.text_input(
+                    "메모",
+                    value=str(selected_row["memo"])
+                )
+                
+                c1, c2 = st.columns(2)
+                
+                with c1:
+                    update_ok = st.form_submit_button(
+                        "수정 저장",
+                        type="primary"
+                    )
+                with c2:
+                    delete_ok = st.form_submit_button(
+                        "삭제"
+                    )
+                    
+            if update_ok:
+                
+                amt = to_int_amount(new_amount)
+                
+                if amt is None:
+                    st.error("금액 형식을 확인해 주세요.")
+                
+                else:
+                    subs.loc[
+                        subs["id"] == selected_row["id"],
+                        ["merchant","amount","billing_day","memo"]
+                    ] = [
+                        new_merchant.strip(),
+                        amt,
+                        new_day.strip(),
+                        new_memo.strip()
+                    ]
+                    
+                    ws("subscriptions").clear()
+                    
+                    ws("subscriptions").append_row([
+                        "id",
+                        "card_name",
+                        "merchant",
+                        "amount",
+                        "billing_day",
+                        "memo",
+                        "created_at"
+                    ])
+                    
+                    safe_append_rows(
+                        "subscriptions",
+                        subs.to_dict("records")
+                    )
+                    
+                    read_df.clear()
+                    
+                    st.success("수정 완료")
+                    
+                    st.rerun()
+                    
+            if delete_ok:
+                
+                remain = subs[
+                    subs["id"] != selected_row["id"]
+                ]
+                
+                ws("subscriptions").clear()
+                
+                ws("subscriptions").append_row([
+                    "id",
+                    "card_name",
+                    "merchant",
+                    "amount",
+                    "billing_day",
+                    "memo",
+                    "created_at"
+                ])
+                
+                if not remain.empty:
+                    
+                    safe_append_rows(
+                        "subscriptions",
+                        remain.to_dict("records")
+                    )
+                
+                read_df.clear()
+                
+                st.success("삭제 완료")
+                
+                st.rerun()
 
 # =============================
 # Tab 7: Assets
