@@ -332,7 +332,42 @@ def gs_book():
 
 @st.cache_resource
 def ws(sheet_key: str):
-    return gs_book().worksheet(SHEET_NAMES[sheet_key])
+
+    title = SHEET_NAMES[sheet_key]
+
+    try:
+        return gs_book().worksheet(title)
+
+    except gspread.exceptions.WorksheetNotFound:
+
+        new_ws = gs_book().add_worksheet(
+            title=title,
+            rows=1000,
+            cols=20
+        )
+
+        headers_map = {
+            "assets_bank": [
+                "id","bank_name","account_number","join_date",
+                "balance","asset_type","maturity_date",
+                "memo","created_at"
+            ],
+
+            "assets_cash": [
+                "id","cash_type","amount","trade_datetime",
+                "detail","memo","created_at"
+            ],
+
+            "assets_other": [
+                "id","content","datetime","amount",
+                "memo","created_at"
+            ],
+        }
+
+        if sheet_key in headers_map:
+            new_ws.append_row(headers_map[sheet_key])
+
+        return new_ws
 
 @st.cache_data(ttl=600)
 def read_df(sheet_key: str) -> pd.DataFrame:
