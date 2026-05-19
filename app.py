@@ -105,7 +105,7 @@ input, textarea {background:#ffffff !important; color:#111827 !important; border
 # =============================
 INCOME_CATS = ["월급", "부수입", "이자", "캐시백", "기타"]
 EXPENSE_CATS = ["식재료", "외식/배달", "생활", "육아", "여가", "교통/유류", "의료", "기타"]
-TAB_NAMES = ["가계부", "예산", "고정지출", "경조사비", "제로페이", "신용카드"]
+TAB_NAMES = ["가계부", "예산", "고정지출", "경조사비", "제로페이", "신용카드", "자산관리"]
 
 SHEET_NAMES = {
     "ledger": "ledger",
@@ -116,6 +116,11 @@ SHEET_NAMES = {
     "zeropay": "zeropay",
     "cards": "cards",
     "subscriptions": "subscriptions",
+
+    # Assets
+    "assets_bank": "assets_bank",
+    "assets_cash": "assets_cash",
+    "assets_other": "assets_other",
 }
 
 # =============================
@@ -718,4 +723,399 @@ with tabs[5]:
                 show.style.format({"금액": lambda x: fmt_amount(int(x))}).set_properties(subset=["금액"], **{"text-align":"right"}),
                 use_container_width=True,
                 hide_index=True,
+            )
+
+# =============================
+# Tab 7: Assets
+# =============================
+with tabs[6]:
+    st.subheader("자산관리")
+
+    asset_tab = st.radio(
+        "구분",
+        ["통장", "현금", "기타"],
+        horizontal=True
+    )
+
+    # =============================
+    # 통장
+    # =============================
+    if asset_tab == "통장":
+
+        st.markdown("#### 통장 등록")
+
+        with st.form("bank_asset_add", clear_on_submit=True):
+
+            bank_name = st.text_input("은행명")
+            account_number = st.text_input("계좌번호")
+            join_date = st.date_input("가입일", value=today)
+            balance_str = st.text_input("잔액")
+            asset_type = st.selectbox("상품구분", ["입출금", "예금", "적금", "청약", "기타"])
+            maturity_date = st.date_input("만기일")
+            memo = st.text_input("기타 정보")
+
+            ok = st.form_submit_button("저장", type="primary")
+
+        if ok and run_once("bank_asset_once"):
+
+            balance = to_int_amount(balance_str)
+
+            if balance is None:
+                st.error("잔액 형식을 확인해 주세요.")
+
+            else:
+
+                row = {
+                    "id": str(uuid.uuid4()),
+                    "bank_name": bank_name.strip(),
+                    "account_number": account_number.strip(),
+                    "join_date": str(join_date),
+                    "balance": balance,
+                    "asset_type": asset_type,
+                    "maturity_date": str(maturity_date),
+                    "memo": memo.strip(),
+                    "created_at": now_str(),
+                }
+
+                safe_append_rows("assets_bank", [row])
+
+                read_df.clear()
+
+                st.success("저장 완료")
+
+        bank_df = ensure_cols(
+            read_df("assets_bank"),
+            ["id","bank_name","account_number","join_date","balance","asset_type","maturity_date","memo"]
+        )
+
+        if not bank_df.empty:
+
+            bank_df["balance"] = pd.to_numeric(
+                bank_df["balance"],
+                errors="coerce"
+            ).fillna(0).astype(int)
+
+            total_bank = int(bank_df["balance"].sum())
+
+            metrics_row3(
+                "통장 개수",
+                len(bank_df),
+                "통장 잔액 합계",
+                total_bank,
+                "평균 잔액",
+                int(total_bank / max(len(bank_df), 1))
+            )
+
+            filter_type = st.selectbox(
+                "상품구분 필터",
+                ["전체"] + sorted(bank_df["asset_type"].astype(str).unique().tolist())
+            )
+
+            view_df = bank_df.copy()
+
+            if filter_type != "전체":
+                view_df = view_df[view_df["asset_type"] == filter_type]
+
+            show = view_df[
+                ["bank_name","account_number","asset_type","join_date","maturity_date","balance","memo"]
+            ].rename(
+                columns={
+                    "bank_name":"은행명",
+                    "account_number":"계좌번호",
+                    "asset_type":"상품구분",
+                    "join_date":"가입일",
+                    "maturity_date":"만기일",
+                    "balance":"잔액",
+                    "memo":"기타정보",
+                }
+            )
+
+            st.dataframe(
+                show.style.format({
+                    "잔액": lambda x: fmt_amount(int(x))
+                }),
+                use_container_width=True,
+                hide_index=True,
+            )
+
+            st.markdown("#### 삭제")
+
+            delete_target = st.selectbox(
+                "삭제할 통장 선택",
+                view_df["bank_name"].astype(str) + " / " + view_df["account_number"].astype(str),
+                key="bank_delete_select"
+            )
+
+            if st.button("통장 삭제", key="bank_delete_btn"):
+
+                idx = (
+                    view_df["bank_name"].astype(str) + " / " + view_df["account_number"].astype(str)
+                ) == delete_target
+
+                delete_id = view_df[idx]["id"].iloc[0]
+
+                remain = bank_df[bank_df["id"] != delete_id]
+
+                ws("assets_bank").clear()
+                ws("assets_bank").append_row(
+                    ["id","bank_name","account_number","join_date","balance","asset_type","maturity_date","memo","created_at"]
+                )
+
+                rows = remain.to_dict("records")
+
+                if rows:
+                    safe_append_rows("assets_bank", rows)
+
+                read_df.clear()
+                st.success("삭제 완료")
+                st.rerun()
+
+    # =============================
+    # 현금
+    # =============================
+    elif asset_tab == "현금":
+
+        st.markdown("#### 현금 내역")
+
+        with st.form("cash_asset_add", clear_on_submit=True):
+
+            cash_type = st.selectbox(
+                "구분",
+                ["빌린 돈", "빌려준 돈"]
+            )
+
+            amount_str = st.text_input("금액")
+
+            trade_datetime = st.date_input(
+                "거래일시",
+                value=today
+            )
+
+            detail = st.text_input("거래내역")
+
+            memo = st.text_input("기타 정보")
+
+            ok = st.form_submit_button("저장", type="primary")
+
+        if ok and run_once("cash_asset_once"):
+
+            amount = to_int_amount(amount_str)
+
+            if amount is None:
+                st.error("금액 형식을 확인해 주세요.")
+
+            else:
+
+                row = {
+                    "id": str(uuid.uuid4()),
+                    "cash_type": cash_type,
+                    "amount": amount,
+                    "trade_datetime": str(trade_datetime),
+                    "detail": detail.strip(),
+                    "memo": memo.strip(),
+                    "created_at": now_str(),
+                }
+
+                safe_append_rows("assets_cash", [row])
+
+                read_df.clear()
+
+                st.success("저장 완료")
+
+        cash_df = ensure_cols(
+            read_df("assets_cash"),
+            ["id","cash_type","amount","trade_datetime","detail","memo"]
+        )
+
+        if not cash_df.empty:
+
+            cash_df["amount"] = pd.to_numeric(
+                cash_df["amount"],
+                errors="coerce"
+            ).fillna(0).astype(int)
+
+            borrowed = int(
+                cash_df.loc[cash_df["cash_type"] == "빌린 돈", "amount"].sum()
+            )
+
+            lent = int(
+                cash_df.loc[cash_df["cash_type"] == "빌려준 돈", "amount"].sum()
+            )
+
+            net_cash = lent - borrowed
+
+            metrics_row3(
+                "빌린 돈",
+                borrowed,
+                "빌려준 돈",
+                lent,
+                "순 현금자산",
+                net_cash
+            )
+
+            show = cash_df[
+                ["cash_type","amount","trade_datetime","detail","memo"]
+            ].rename(
+                columns={
+                    "cash_type":"구분",
+                    "amount":"금액",
+                    "trade_datetime":"거래일시",
+                    "detail":"거래내역",
+                    "memo":"기타정보",
+                }
+            )
+
+            st.dataframe(
+                show.style.format({
+                    "금액": lambda x: fmt_amount(int(x))
+                }),
+                use_container_width=True,
+                hide_index=True,
+            )
+
+    # =============================
+    # 기타
+    # =============================
+    else:
+
+        st.markdown("#### 기타 자산")
+
+        with st.form("other_asset_add", clear_on_submit=True):
+
+            content = st.text_input("내용")
+
+            dt = st.date_input(
+                "일시",
+                value=today
+            )
+
+            amount_str = st.text_input("금액")
+
+            memo = st.text_input("기타 정보")
+
+            ok = st.form_submit_button("저장", type="primary")
+
+        if ok and run_once("other_asset_once"):
+
+            amount = to_int_amount(amount_str)
+
+            if amount is None:
+                st.error("금액 형식을 확인해 주세요.")
+
+            else:
+
+                row = {
+                    "id": str(uuid.uuid4()),
+                    "content": content.strip(),
+                    "datetime": str(dt),
+                    "amount": amount,
+                    "memo": memo.strip(),
+                    "created_at": now_str(),
+                }
+
+                safe_append_rows("assets_other", [row])
+
+                read_df.clear()
+
+                st.success("저장 완료")
+
+        other_df = ensure_cols(
+            read_df("assets_other"),
+            ["id","content","datetime","amount","memo"]
+        )
+
+        if not other_df.empty:
+
+            other_df["amount"] = pd.to_numeric(
+                other_df["amount"],
+                errors="coerce"
+            ).fillna(0).astype(int)
+
+            other_total = int(other_df["amount"].sum())
+
+            bank_total = 0
+            cash_total = 0
+
+            try:
+                bank_df2 = ensure_cols(
+                    read_df("assets_bank"),
+                    ["balance"]
+                )
+
+                if not bank_df2.empty:
+                    bank_df2["balance"] = pd.to_numeric(
+                        bank_df2["balance"],
+                        errors="coerce"
+                    ).fillna(0).astype(int)
+
+                    bank_total = int(bank_df2["balance"].sum())
+
+            except:
+                pass
+
+            try:
+                cash_df2 = ensure_cols(
+                    read_df("assets_cash"),
+                    ["cash_type","amount"]
+                )
+
+                if not cash_df2.empty:
+
+                    cash_df2["amount"] = pd.to_numeric(
+                        cash_df2["amount"],
+                        errors="coerce"
+                    ).fillna(0).astype(int)
+
+                    borrowed2 = int(
+                        cash_df2.loc[cash_df2["cash_type"] == "빌린 돈", "amount"].sum()
+                    )
+
+                    lent2 = int(
+                        cash_df2.loc[cash_df2["cash_type"] == "빌려준 돈", "amount"].sum()
+                    )
+
+                    cash_total = lent2 - borrowed2
+
+            except:
+                pass
+
+            total_asset = bank_total + cash_total + other_total
+
+            metrics_row3(
+                "기타 자산",
+                other_total,
+                "순자산",
+                total_asset,
+                "등록 건수",
+                len(other_df)
+            )
+
+            show = other_df[
+                ["content","datetime","amount","memo"]
+            ].rename(
+                columns={
+                    "content":"내용",
+                    "datetime":"일시",
+                    "amount":"금액",
+                    "memo":"기타정보",
+                }
+            )
+
+            st.dataframe(
+                show.style.format({
+                    "금액": lambda x: fmt_amount(int(x))
+                }),
+                use_container_width=True,
+                hide_index=True,
+            )
+
+            st.markdown("#### 자산 구성 요약")
+
+            chart_df = pd.DataFrame({
+                "구분": ["통장", "현금", "기타"],
+                "금액": [bank_total, cash_total, other_total]
+            })
+
+            st.bar_chart(
+                chart_df.set_index("구분")
             )
