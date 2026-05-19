@@ -783,10 +783,19 @@ with tabs[6]:
 
             bank_name = st.text_input("은행명")
             account_number = st.text_input("계좌번호")
-            join_date = st.date_input("가입일", value=today)
+            join_date = st.date_input(
+                "가입일",
+                value=today,
+                min_value=datetime(1990, 1, 1).date(),
+                max_value=today
+            )
             balance_str = st.text_input("잔액")
             asset_type = st.selectbox("상품구분", ["입출금", "예금", "적금", "청약", "기타"])
-            maturity_date = st.date_input("만기일")
+            maturity_date = st.date_input(
+                "만기일",
+                value=today,
+                min_value=datetime(1990, 1, 1).date()
+            )
             memo = st.text_input("기타 정보")
 
             ok = st.form_submit_button("저장", type="primary")
