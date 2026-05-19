@@ -851,12 +851,24 @@ with tabs[5]:
                         "created_at"
                     ])
                     
-                    rows = subs.to_dict("records")
+                    rows = []
                     
-                    safe_append_rows(
-                        "subscriptions",
-                        rows
-                    )
+                    for _, r in subs.iterrows():
+                        rows.append([
+                            r.get("id", ""),
+                            r.get("card_name", ""),
+                            r.get("merchant", ""),
+                            r.get("amount", ""),
+                            r.get("billing_day", ""),
+                            r.get("memo", ""),
+                            r.get("created_at", ""),
+                        ])
+                    
+                    if rows:
+                        ws("subscriptions").append_rows(
+                            rows,
+                            value_input_option="USER_ENTERED"
+                        )
             
                     read_df.clear()
                     
