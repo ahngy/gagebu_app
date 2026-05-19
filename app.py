@@ -791,11 +791,17 @@ with tabs[6]:
             )
             balance_str = st.text_input("잔액")
             asset_type = st.selectbox("상품구분", ["입출금", "예금", "적금", "청약", "기타"])
-            maturity_date = st.date_input(
-                "만기일",
-                value=today,
-                min_value=datetime(1990, 1, 1).date()
-            )
+            has_maturity = st.checkbox("만기일 있음", value=False)
+            
+            maturity_date = None
+            
+            if has_maturity:
+                maturity_date = st.date_input(
+                    "만기일",
+                    value=today,
+                    min_value=datetime(1970, 1, 1).date()
+                )
+                
             memo = st.text_input("기타 정보")
 
             ok = st.form_submit_button("저장", type="primary")
@@ -816,7 +822,7 @@ with tabs[6]:
                     "join_date": str(join_date),
                     "balance": balance,
                     "asset_type": asset_type,
-                    "maturity_date": str(maturity_date),
+                    "maturity_date": str(maturity_date) if maturity_date else "",
                     "memo": memo.strip(),
                     "created_at": now_str(),
                 }
