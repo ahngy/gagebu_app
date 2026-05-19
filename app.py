@@ -1081,65 +1081,6 @@ with tabs[6]:
                 errors="coerce"
             ).fillna(0).astype(int)
 
-            other_total = int(other_df["amount"].sum())
-
-            bank_total = 0
-            cash_total = 0
-
-            try:
-                bank_df2 = ensure_cols(
-                    read_df("assets_bank"),
-                    ["balance"]
-                )
-
-                if not bank_df2.empty:
-                    bank_df2["balance"] = pd.to_numeric(
-                        bank_df2["balance"],
-                        errors="coerce"
-                    ).fillna(0).astype(int)
-
-                    bank_total = int(bank_df2["balance"].sum())
-
-            except:
-                pass
-
-            try:
-                cash_df2 = ensure_cols(
-                    read_df("assets_cash"),
-                    ["cash_type","amount"]
-                )
-
-                if not cash_df2.empty:
-
-                    cash_df2["amount"] = pd.to_numeric(
-                        cash_df2["amount"],
-                        errors="coerce"
-                    ).fillna(0).astype(int)
-
-                    borrowed2 = int(
-                        cash_df2.loc[cash_df2["cash_type"] == "빌린 돈", "amount"].sum()
-                    )
-
-                    lent2 = int(
-                        cash_df2.loc[cash_df2["cash_type"] == "빌려준 돈", "amount"].sum()
-                    )
-
-                    cash_total = lent2 - borrowed2
-
-            except:
-                pass
-
-            total_asset = bank_total + cash_total + other_total
-
-            metrics_row3(
-                "기타 자산",
-                other_total,
-                "순자산",
-                total_asset,
-                "등록 건수",
-                len(other_df)
-            )
-
             show = other_df[
                 ["content","datetime","amount","memo"]
             ].rename(
@@ -1157,15 +1098,4 @@ with tabs[6]:
                 }),
                 use_container_width=True,
                 hide_index=True,
-            )
-
-            st.markdown("#### 자산 구성 요약")
-
-            chart_df = pd.DataFrame({
-                "구분": ["통장", "현금", "기타"],
-                "금액": [bank_total, cash_total, other_total]
-            })
-
-            st.bar_chart(
-                chart_df.set_index("구분")
             )
