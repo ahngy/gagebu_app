@@ -823,8 +823,12 @@ with tabs[5]:
                     st.error("금액 형식을 확인해 주세요.")
                 
                 else:
+                    target_id = str(selected_row["id"])
+                    
+                    subs["id"] = subs["id"].astype(str)
+                    
                     subs.loc[
-                        subs["id"] == selected_row["id"],
+                        subs["id"] == target_id,
                         ["merchant","amount","billing_day","memo"]
                     ] = [
                         new_merchant.strip(),
@@ -845,11 +849,13 @@ with tabs[5]:
                         "created_at"
                     ])
                     
+                    rows = subs.to_dict("records")
+                    
                     safe_append_rows(
                         "subscriptions",
-                        subs.to_dict("records")
+                        rows
                     )
-                    
+            
                     read_df.clear()
                     
                     st.success("수정 완료")
