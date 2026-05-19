@@ -753,6 +753,11 @@ with tabs[5]:
         else:
             sel = st.selectbox("카드 선택", sorted(subs["card_name"].astype(str).unique().tolist()), key="sub_card_pick")
             sub_view = subs[subs["card_name"].astype(str) == sel].copy()
+            sub_total = int(sub_view["amount"].sum())
+            
+            st.markdown(
+                f"### 💳 정기결제 총액: {fmt_amount(sub_total)}원"
+            )
             show = sub_view[["merchant","amount","billing_day","memo"]].rename(columns={"merchant":"가맹점/서비스","amount":"금액","billing_day":"결제일","memo":"메모"})
             st.dataframe(
                 show.style.format({"금액": lambda x: fmt_amount(int(x))}).set_properties(subset=["금액"], **{"text-align":"right"}),
