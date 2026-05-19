@@ -823,15 +823,13 @@ with tabs[5]:
                     st.error("금액 형식을 확인해 주세요.")
                 
                 else:
-                    target_id = str(selected_row["id"])
-                    
-                    subs["id"] = subs["id"].astype(str)
-
                     subs = subs.fillna("")
                     
+                    target_idx = selected_row.name
+                    
                     subs.loc[
-                        subs["id"] == target_id,
-                        ["merchant","amount","billing_day","memo"]
+                    target_idx,
+                    ["merchant","amount","billing_day","memo"]
                     ] = [
                         new_merchant.strip(),
                         amt,
