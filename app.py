@@ -826,6 +826,8 @@ with tabs[5]:
                     target_id = str(selected_row["id"])
                     
                     subs["id"] = subs["id"].astype(str)
+
+                    subs = subs.fillna("")
                     
                     subs.loc[
                         subs["id"] == target_id,
