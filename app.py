@@ -870,7 +870,7 @@ with tabs[5]:
                             value_input_option="USER_ENTERED"
                         )
             
-                    read_df.clear()
+                    st.cache_data.clear()
                     
                     st.success("수정 완료")
                     
