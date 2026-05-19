@@ -838,6 +838,10 @@ with tabs[5]:
                         new_day.strip(),
                         new_memo.strip()
                     ]
+
+                    st.write(
+                        subs.loc[subs["id"] == target_id]
+                    )
                     
                     ws("subscriptions").clear()
                     
